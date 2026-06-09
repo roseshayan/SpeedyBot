@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 SERVICE_NAME="xui-bot.service"
-APP_DIR="/root/xui-shop-bot"
+APP_DIR="/root/SpeedyBot"
 ENV_FILE="$APP_DIR/.env"
 RUNNER_FILE="$APP_DIR/run.sh"
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME"
@@ -15,7 +15,7 @@ NC="\033[0m"
 
 info()    { printf "${BLUE}[INFO]${NC} %s\n" "$*"; }
 success() { printf "${GREEN}[OK]${NC} %s\n" "$*"; }
-warn()    { printf "${YELLOW}[WARN]${NC} %s\n" "$*"; }
+warn()    { printf "${YELLOW}[WARN]${NC} %s\n" "$*" >&2; }
 error()   { printf "${RED}[ERROR]${NC} %s\n" "$*" >&2; }
 
 trap 'error "Installation failed at line $LINENO. Check the message above."' ERR
@@ -62,8 +62,10 @@ prompt_secret() {
   local prompt="$1"
   local value=""
   while true; do
-    read -r -p "$prompt: " value || true
-    printf '\n'
+    # Write prompt to stderr so it doesn't get captured by command substitution
+    printf "%s: " "$prompt" >&2
+    read -r value || true
+    printf '\n' >&2
     value="$(trim "${value:-}")"
     if [[ -n "$value" ]]; then
       printf '%s' "$value"
@@ -81,11 +83,13 @@ prompt_bot_token() {
   local value
   while true; do
     value="$(prompt_secret "Telegram bot token")"
-    if [[ -n "$value" ]]; then
+    # Remove any possible whitespace or control characters (just in case)
+    value="$(echo "$value" | tr -d '\n\r\t')"
+    if validate_bot_token "$value"; then
       printf '%s' "$value"
       return 0
     fi
-    warn "Token cannot be empty."
+    warn "Invalid Telegram bot token format. Example: 123456789:AAAbbbCCC..."
   done
 }
 
@@ -185,6 +189,8 @@ prompt_bearer_token() {
   local value
   while true; do
     value="$(prompt_secret "Panel bearer token")"
+    # Remove any possible whitespace or control characters
+    value="$(echo "$value" | tr -d '\n\r\t')"
     if [[ -n "$value" ]]; then
       printf '%s' "$value"
       return 0
@@ -290,8 +296,8 @@ EOF
   cat > "$RUNNER_FILE" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-source /root/xui-shop-bot/.env
-exec /root/xui-shop-bot/.venv/bin/python3 /root/xui-shop-bot/main.py
+source /root/SpeedyBot/.env
+exec /root/SpeedyBot/.venv/bin/python3 /root/SpeedyBot/main.py
 EOF
   chmod 700 "$RUNNER_FILE"
 

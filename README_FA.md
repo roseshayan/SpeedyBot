@@ -105,7 +105,7 @@ sudo ./install.sh
 سپس این کارها را انجام می‌دهد:
 
 - نصب پکیج‌های پایتون
-- ساخت دایرکتوری `/root/xui-shop-bot`
+- ساخت دایرکتوری `/root/SpeedyBot`
 - کپی کردن `main.py`
 - ساخت virtualenv
 - نصب وابستگی‌ها
@@ -124,9 +124,9 @@ sudo apt install -y python3 python3-pip python3-venv
 پوشه کاری را بسازید:
 
 ```bash
-sudo mkdir -p /root/xui-shop-bot
-sudo cp main.py /root/xui-shop-bot/main.py
-cd /root/xui-shop-bot
+sudo mkdir -p /root/SpeedyBot
+sudo cp main.py /root/SpeedyBot/main.py
+cd /root/SpeedyBot
 ```
 
 محیط مجازی و وابستگی‌ها را نصب کنید:
@@ -153,8 +153,8 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/root/xui-shop-bot
-ExecStart=/root/xui-shop-bot/.venv/bin/python3 /root/xui-shop-bot/main.py
+WorkingDirectory=/root/SpeedyBot
+ExecStart=/root/SpeedyBot/.venv/bin/python3 /root/SpeedyBot/main.py
 Restart=always
 RestartSec=5
 Environment=BOT_TOKEN=YOUR_BOT_TOKEN

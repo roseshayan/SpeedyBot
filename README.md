@@ -92,7 +92,7 @@ The installer will:
 
 - validate every input before continuing
 - ask again if a value is invalid or empty
-- create `/root/xui-shop-bot`
+- create `/root/SpeedyBot`
 - copy `main.py` there
 - create a Python virtual environment
 - install the required Python packages
@@ -104,15 +104,15 @@ The installer will:
 
 The service runs the bot from:
 
-- `/root/xui-shop-bot/main.py`
+- `/root/SpeedyBot/main.py`
 
 The database file is created here:
 
-- `/root/xui-shop-bot/speedping.db`
+- `/root/SpeedyBot/speedping.db`
 
 The environment variables are stored in:
 
-- `/root/xui-shop-bot/.env`
+- `/root/SpeedyBot/.env`
 
 ## Managing the service
 
@@ -143,7 +143,7 @@ systemctl stop xui-bot.service
 ### Edit configuration
 
 ```bash
-nano /root/xui-shop-bot/.env
+nano /root/SpeedyBot/.env
 systemctl restart xui-bot.service
 ```
 
@@ -161,9 +161,9 @@ sudo apt install -y python3 python3-pip python3-venv
 ### 2) Copy the project
 
 ```bash
-sudo mkdir -p /root/xui-shop-bot
-sudo cp main.py /root/xui-shop-bot/main.py
-cd /root/xui-shop-bot
+sudo mkdir -p /root/SpeedyBot
+sudo cp main.py /root/SpeedyBot/main.py
+cd /root/SpeedyBot
 ```
 
 ### 3) Create the virtual environment
@@ -174,7 +174,7 @@ python3 -m venv .venv
 ./.venv/bin/python -m pip install pyTelegramBotAPI requests
 ```
 
-### 4) Create `/root/xui-shop-bot/.env`
+### 4) Create `/root/SpeedyBot/.env`
 
 ```bash
 export BOT_TOKEN=YOUR_BOT_TOKEN
@@ -185,13 +185,13 @@ export XUI_BEARER_TOKEN=YOUR_BEARER_TOKEN
 export XUI_SUB_SERVER_URL=YOUR_SUB_SERVER_URL
 ```
 
-### 5) Create `/root/xui-shop-bot/run.sh`
+### 5) Create `/root/SpeedyBot/run.sh`
 
 ```bash
 #!/usr/bin/env bash
 set -Eeuo pipefail
-source /root/xui-shop-bot/.env
-exec /root/xui-shop-bot/.venv/bin/python3 /root/xui-shop-bot/main.py
+source /root/SpeedyBot/.env
+exec /root/SpeedyBot/.venv/bin/python3 /root/SpeedyBot/main.py
 ```
 
 ### 6) Create the systemd service
@@ -211,8 +211,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/root/xui-shop-bot
-ExecStart=/root/xui-shop-bot/run.sh
+WorkingDirectory=/root/SpeedyBot
+ExecStart=/root/SpeedyBot/run.sh
 Restart=always
 RestartSec=5
 
@@ -259,7 +259,7 @@ Make sure:
 Replace `main.py` with the new version and restart the service:
 
 ```bash
-sudo cp main.py /root/xui-shop-bot/main.py
+sudo cp main.py /root/SpeedyBot/main.py
 sudo systemctl restart xui-bot.service
 ```
 
@@ -269,7 +269,7 @@ sudo systemctl restart xui-bot.service
 sudo systemctl stop xui-bot.service
 sudo systemctl disable xui-bot.service
 sudo rm -f /etc/systemd/system/xui-bot.service
-sudo rm -rf /root/xui-shop-bot
+sudo rm -rf /root/SpeedyBot
 sudo systemctl daemon-reload
 ```
 

@@ -31,8 +31,8 @@ def init_db():
     cursor.execute('''CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)''')
     
     # مقادیر اولیه تنظیمات کارت بانکی
-    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('card_number', '6219-8619-3574-8060')")
-    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('card_holder', 'شایان نماینده')")
+    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('card_number', '6219-0000-0000-0000')")
+    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('card_holder', 'تست تست')")
     cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('bank_name', 'بلو بانک')")
     conn.commit()
     conn.close()
