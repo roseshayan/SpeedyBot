@@ -11,7 +11,7 @@ from datetime import datetime
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
-# تنظیمات اتصال به پنل ثنایی
+# تنظیمات اتصال به پنل سنائی
 XUI_API_URL = os.getenv("XUI_API_URL")          # مثلا http://127.0.0.1:2053
 XUI_BASE_PATH = os.getenv("XUI_BASE_PATH")      # مثلا /pKPl2UQ2sKTDnSWXb0
 XUI_BEARER_TOKEN = os.getenv("XUI_BEARER_TOKEN")
