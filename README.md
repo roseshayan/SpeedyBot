@@ -17,8 +17,7 @@
 
 ```bash
 git clone [https://github.com/YOUR_USERNAME/SpeedPing.git](https://github.com/YOUR_USERNAME/SpeedPing.git) && cd SpeedPing && chmod +x install.sh && ./install.sh
-
----
+```
 
 ## ✅ گام آخر برای انتشار
 1. یک حساب در GitHub بساز و یک مخزن (Repository) جدید به اسم دلخواه (مثلاً `xui-telegram-shop-bot`) ایجاد کن.
