@@ -81,11 +81,11 @@ prompt_bot_token() {
   local value
   while true; do
     value="$(prompt_secret "Telegram bot token")"
-    if validate_bot_token "$value"; then
+    if [[ -n "$value" ]]; then
       printf '%s' "$value"
       return 0
     fi
-    warn "Invalid Telegram bot token format. Example: 123456789:AAAbbbCCC..."
+    warn "Token cannot be empty."
   done
 }
 
