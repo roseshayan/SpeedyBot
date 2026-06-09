@@ -16,5 +16,5 @@
 کافیست دستور زیر را در ترمینال سروری که پنل روی آن نصب است وارد کرده و اطلاعات درخواستی را وارد نمایید:
 
 ```bash
-git clone [https://github.com/YOUR_USERNAME/SpeedPing.git](https://github.com/YOUR_USERNAME/SpeedPing.git) && cd SpeedPing && chmod +x install.sh && ./install.sh
+git clone [https://github.com/roseshayan/SpeedyBot.git](https://github.com/roseshayan/SpeedyBot.git) && cd SpeedyBot && chmod +x install.sh && ./install.sh
 ```
