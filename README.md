@@ -18,14 +18,3 @@
 ```bash
 git clone [https://github.com/YOUR_USERNAME/SpeedPing.git](https://github.com/YOUR_USERNAME/SpeedPing.git) && cd SpeedPing && chmod +x install.sh && ./install.sh
 ```
-
-## ✅ گام آخر برای انتشار
-1. یک حساب در GitHub بساز و یک مخزن (Repository) جدید به اسم دلخواه (مثلاً `xui-telegram-shop-bot`) ایجاد کن.
-2. با دستورات گیت، کدهات رو آپلود کن:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial Release for v3.3.0"
-   git branch -M main
-   git remote add origin آدرس_مخزن_شما
-   git push -u origin main
