@@ -62,7 +62,7 @@ prompt_secret() {
   local prompt="$1"
   local value=""
   while true; do
-    read -r -s -p "$prompt: " value || true
+    read -r -p "$prompt: " value || true
     printf '\n'
     value="$(trim "${value:-}")"
     if [[ -n "$value" ]]; then
