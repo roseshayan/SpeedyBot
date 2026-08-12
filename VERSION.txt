@@ -1,1 +1,1 @@
-2.1.0-sanaei-api-fix
+2.2.0-service-notifications

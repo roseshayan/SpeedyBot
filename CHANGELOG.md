@@ -1,4 +1,17 @@
 # Changelog
+## 2.2.0 - Service notifications
+
+- Added automatic background monitoring for bot-issued paid and trial services.
+- Uses one `GET /panel/api/clients/list` request per monitoring cycle to read quota, traffic and expiry.
+- Sends one-time volume warning at 90% usage.
+- Sends one-time expiry warning at 24 hours for paid services and 3 hours for free trials.
+- Sends one-time notifications when traffic quota is exhausted or expiry time is reached.
+- Prevents duplicate notifications across bot/server restarts using the `service_notifications` SQLite table.
+- Marks exhausted/expired free trials as `EXPIRED` while retaining their anti-abuse history.
+- Added `/notifydiag` for a manual admin-side service check.
+- Added `🔔 اعلان سرویس‌ها` admin panel with toggle and manual check.
+- Monitoring interval defaults to 5 minutes and is stored in DB settings.
+
 
 ## 2.1.0 - Sanaei API compatibility & diagnostics
 

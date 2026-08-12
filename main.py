@@ -7,6 +7,7 @@ import requests
 import time
 import re
 import secrets
+import threading
 from urllib.parse import quote
 from datetime import datetime
 
@@ -25,6 +26,8 @@ DEVELOPMENT_MODE = False
 bot = telebot.TeleBot(BOT_TOKEN)
 USER_STATES = {}
 _BOT_USERNAME_CACHE = None
+SERVICE_MONITOR_LOCK = threading.Lock()
+SERVICE_MONITOR_THREAD = None
 
 # --- PLANS DATA ---
 PLANS = {
@@ -125,6 +128,15 @@ def init_db():
         unique_key TEXT UNIQUE,
         created_at INTEGER NOT NULL
     )''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS service_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        service_email TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        service_kind TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        UNIQUE(service_email, event_type)
+    )''')
 
     # تنظیمات اولیه
     defaults = {
@@ -133,6 +145,11 @@ def init_db():
         'bank_name': 'بلو بانک',
         'referral_enabled': '1',
         'referral_commission_percent': '10',
+        'service_notifications_enabled': '1',
+        'service_notification_interval_seconds': '300',
+        'service_volume_warning_percent': '90',
+        'service_expiry_warning_hours': '24',
+        'trial_expiry_warning_hours': '3',
     }
     for key, value in defaults.items():
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value))
@@ -449,6 +466,7 @@ def admin_main_menu():
         types.InlineKeyboardButton("📊 آمار ربات و فروش", callback_data="admin:stats"),
         types.InlineKeyboardButton("🤝 همکاری در فروش", callback_data="admin:affiliate"),
         types.InlineKeyboardButton("🖥 وضعیت زنده سرور", callback_data="admin:server_status"),
+        types.InlineKeyboardButton("🔔 اعلان سرویس‌ها", callback_data="admin:notifications"),
         types.InlineKeyboardButton("📢 ارسال پیام همگانی", callback_data="admin:broadcast"),
         types.InlineKeyboardButton("💳 تنظیمات حساب واریز", callback_data="admin:bank_config"),
         types.InlineKeyboardButton("👤 غیرفعال کردن کاربر", callback_data="admin:delete_user"),
@@ -1151,6 +1169,45 @@ def handle_admin_panel_callbacks(call):
         tx_id = int(call.data.split(':')[2])
         refund_issue_wallet_transaction(call, tx_id)
         return
+
+    elif action == "notifications":
+        enabled = service_notifications_enabled()
+        interval = get_service_notification_interval()
+        volume_warn = get_service_volume_warning_percent()
+        expiry_warn = get_service_expiry_warning_hours(False)
+        trial_warn = get_service_expiry_warning_hours(True)
+        conn = _db_connect()
+        sent_total = conn.execute("SELECT COUNT(*) AS c FROM service_notifications").fetchone()['c']
+        expired_count = conn.execute("SELECT COUNT(*) AS c FROM service_notifications WHERE event_type IN ('VOLUME_EXHAUSTED','TIME_EXPIRED')").fetchone()['c']
+        conn.close()
+        text = (
+            "🔔 **مدیریت اعلان سرویس‌ها**\n\n"
+            f"وضعیت: {'🟢 فعال' if enabled else '🔴 غیرفعال'}\n"
+            f"فاصله بررسی پنل: **{interval // 60 if interval >= 60 else interval} {'دقیقه' if interval >= 60 else 'ثانیه'}**\n"
+            f"هشدار حجم: **{volume_warn:g}٪ مصرف**\n"
+            f"هشدار زمان سرویس پولی: **{expiry_warn:g} ساعت مانده**\n"
+            f"هشدار زمان تست: **{trial_warn:g} ساعت مانده**\n"
+            f"رویدادهای ثبت‌شده: **{int(sent_total)}**\n"
+            f"اعلان‌های اتمام ثبت‌شده: **{int(expired_count)}**\n\n"
+            "اعلان اتمام حجم/زمان برای هر سرویس فقط یک‌بار ثبت و ارسال می‌شود."
+        )
+        m = types.InlineKeyboardMarkup(row_width=2)
+        m.add(
+            types.InlineKeyboardButton("⏯ روشن/خاموش", callback_data="admin:notifications_toggle"),
+            types.InlineKeyboardButton("🔄 بررسی همین الان", callback_data="admin:notifications_check")
+        )
+        bot.send_message(ADMIN_ID, text, parse_mode="Markdown", reply_markup=m)
+
+    elif action == "notifications_toggle":
+        new_value = '0' if service_notifications_enabled() else '1'
+        update_db_setting('service_notifications_enabled', new_value)
+        bot.answer_callback_query(call.id, "وضعیت تغییر کرد ✅")
+        bot.send_message(ADMIN_ID, f"🔔 اعلان سرویس‌ها {'فعال شد 🟢' if new_value == '1' else 'غیرفعال شد 🔴'}")
+
+    elif action == "notifications_check":
+        bot.answer_callback_query(call.id, "در حال بررسی پنل...")
+        result = check_service_notifications(force=True)
+        bot.send_message(ADMIN_ID, _format_monitor_result(result), parse_mode="Markdown")
 
     elif action == "server_status":
         bot.answer_callback_query(call.id, "در حال استعلام وضعیت زنده...")
@@ -1864,6 +1921,277 @@ def reconcile_missing_referral_commissions():
             continue
 
 
+def service_notifications_enabled():
+    return get_db_setting('service_notifications_enabled', '1') == '1'
+
+
+def _safe_int_setting(key, default_value, minimum, maximum):
+    try:
+        value = int(float(get_db_setting(key, str(default_value))))
+        return max(minimum, min(value, maximum))
+    except Exception:
+        return default_value
+
+
+def get_service_notification_interval():
+    # حداقل 60 ثانیه تا از فشار غیرضروری به API پنل جلوگیری شود.
+    return _safe_int_setting('service_notification_interval_seconds', 300, 60, 3600)
+
+
+def get_service_volume_warning_percent():
+    try:
+        value = float(get_db_setting('service_volume_warning_percent', '90'))
+        return max(50.0, min(value, 99.9))
+    except Exception:
+        return 90.0
+
+
+def get_service_expiry_warning_hours(is_trial=False):
+    key = 'trial_expiry_warning_hours' if is_trial else 'service_expiry_warning_hours'
+    default = 3 if is_trial else 24
+    try:
+        value = float(get_db_setting(key, str(default)))
+        return max(0.0, min(value, 168.0))
+    except Exception:
+        return float(default)
+
+
+def _claim_service_notification(service_email, user_id, service_kind, event_type):
+    """Atomically claim an event before sending so restarts cannot duplicate it."""
+    conn = _db_connect()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            "INSERT INTO service_notifications (service_email, user_id, service_kind, event_type, created_at) VALUES (?, ?, ?, ?, ?)",
+            (service_email, int(user_id), service_kind, event_type, int(time.time()))
+        )
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+
+def _tracked_service_map():
+    """Return service_email -> metadata for paid services and free trials issued by this bot."""
+    conn = _db_connect()
+    result = {}
+    try:
+        paid_rows = conn.execute(
+            "SELECT user_id, service_email, id AS tx_id FROM transactions WHERE status = 'APPROVED' AND service_email IS NOT NULL AND service_email != ''"
+        ).fetchall()
+        for row in paid_rows:
+            result[str(row['service_email'])] = {
+                'user_id': int(row['user_id']), 'kind': 'PAID', 'tx_id': int(row['tx_id'])
+            }
+        trial_rows = conn.execute(
+            "SELECT user_id, email FROM trial_services WHERE status = 'ACTIVE'"
+        ).fetchall()
+        for row in trial_rows:
+            result[str(row['email'])] = {
+                'user_id': int(row['user_id']), 'kind': 'TRIAL', 'tx_id': None
+            }
+        return result
+    finally:
+        conn.close()
+
+
+def _fetch_xui_clients_for_monitor():
+    url = _xui_url("panel/api/clients/list")
+    response = requests.get(
+        url,
+        headers=_xui_headers(),
+        proxies=_xui_proxies(),
+        timeout=20,
+        verify=not DEVELOPMENT_MODE
+    )
+    data = _safe_json(response)
+    if response.status_code != 200 or not data.get('success'):
+        raise RuntimeError(_xui_response_error(response, "خطا در مانیتور سرویس‌ها"))
+    clients = data.get('obj', []) or []
+    return {str(c.get('email')): c for c in clients if c.get('email')}
+
+
+def _service_usage(client):
+    traffic = client.get('traffic') or {}
+    up = int(traffic.get('up') or client.get('up') or 0)
+    down = int(traffic.get('down') or client.get('down') or 0)
+    used = max(0, up + down)
+    total = int(client.get('totalGB') or client.get('total') or 0)
+    expiry_ms = int(client.get('expiryTime') or 0)
+    return used, max(0, total), max(0, expiry_ms)
+
+
+def _human_gb(byte_count):
+    return byte_count / (1024 ** 3)
+
+
+def _send_service_event(meta, email, event_types, client):
+    user_id = int(meta['user_id'])
+    is_trial = meta['kind'] == 'TRIAL'
+    used, total, expiry_ms = _service_usage(client)
+    remaining = max(0, total - used) if total > 0 else None
+    now_ms = int(time.time() * 1000)
+    hours_left = max(0.0, (expiry_ms - now_ms) / 3600000) if expiry_ms > 0 else None
+
+    event_set = set(event_types)
+    if 'VOLUME_EXHAUSTED' in event_set and 'TIME_EXPIRED' in event_set:
+        title = "⛔️ حجم و اعتبار زمانی سرویس شما به پایان رسید"
+        detail = "هم حجم سرویس مصرف شده و هم تاریخ اعتبار آن گذشته است."
+    elif 'VOLUME_EXHAUSTED' in event_set:
+        title = "📦 حجم سرویس شما تمام شد"
+        detail = "سهمیه حجمی این سرویس به پایان رسیده است."
+    elif 'TIME_EXPIRED' in event_set:
+        title = "⏰ اعتبار سرویس شما تمام شد"
+        detail = "مدت اعتبار زمانی این سرویس به پایان رسیده است."
+    elif 'VOLUME_WARNING' in event_set:
+        percent = (used / total * 100) if total > 0 else 0
+        title = "⚠️ حجم سرویس شما رو به اتمام است"
+        detail = f"حدود **{percent:.0f}٪** از حجم سرویس مصرف شده و تقریباً **{_human_gb(remaining):.2f} GB** باقی مانده است."
+    elif 'TIME_WARNING' in event_set:
+        title = "⚠️ اعتبار سرویس شما رو به اتمام است"
+        if hours_left is not None and hours_left < 1:
+            detail = f"کمتر از **{max(1, int(hours_left * 60))} دقیقه** از اعتبار سرویس باقی مانده است."
+        else:
+            detail = f"حدود **{hours_left:.1f} ساعت** از اعتبار سرویس باقی مانده است."
+    else:
+        return
+
+    kind_text = "تست رایگان" if is_trial else "سرویس SpeedPing"
+    text = (
+        f"{title}\n\n"
+        f"🔹 نوع: **{kind_text}**\n"
+        f"🔸 شناسه سرویس: `{email}`\n\n"
+        f"{detail}\n\n"
+        "برای تهیه سرویس جدید از گزینه **🛍 مشاهده و خرید پلان‌ها** استفاده کنید."
+    )
+    bot.send_message(user_id, text, parse_mode="Markdown", reply_markup=main_menu())
+
+
+def check_service_notifications(force=False):
+    """Check tracked bot-issued clients and send one-time quota/expiry notifications."""
+    if not service_notifications_enabled() and not force:
+        return {'enabled': False, 'tracked': 0, 'found': 0, 'sent': 0, 'missing': 0, 'errors': 0}
+    if not SERVICE_MONITOR_LOCK.acquire(blocking=False):
+        return {'enabled': True, 'busy': True, 'tracked': 0, 'found': 0, 'sent': 0, 'missing': 0, 'errors': 0}
+    result = {'enabled': True, 'busy': False, 'tracked': 0, 'found': 0, 'sent': 0, 'missing': 0, 'errors': 0}
+    try:
+        tracked = _tracked_service_map()
+        result['tracked'] = len(tracked)
+        if not tracked:
+            return result
+        clients = _fetch_xui_clients_for_monitor()
+        now_ms = int(time.time() * 1000)
+        volume_warning_pct = get_service_volume_warning_percent()
+
+        for email, meta in tracked.items():
+            client = clients.get(email)
+            if not client:
+                result['missing'] += 1
+                continue
+            result['found'] += 1
+            try:
+                used, total, expiry_ms = _service_usage(client)
+                volume_exhausted = total > 0 and used >= total
+                time_expired = expiry_ms > 0 and now_ms >= expiry_ms
+                warning_events = []
+                end_events = []
+
+                if volume_exhausted:
+                    end_events.append('VOLUME_EXHAUSTED')
+                elif total > 0 and used > 0 and (used / total * 100.0) >= volume_warning_pct:
+                    warning_events.append('VOLUME_WARNING')
+
+                if time_expired:
+                    end_events.append('TIME_EXPIRED')
+                elif expiry_ms > 0:
+                    hours_left = (expiry_ms - now_ms) / 3600000.0
+                    threshold = get_service_expiry_warning_hours(meta['kind'] == 'TRIAL')
+                    if threshold > 0 and 0 < hours_left <= threshold:
+                        warning_events.append('TIME_WARNING')
+
+                # اگر سرویس همین حالا تمام شده، هشدار نزدیک اتمام دیگر فرستاده نمی‌شود.
+                events_to_send = end_events if end_events else warning_events
+                claimed = []
+                for event_type in events_to_send:
+                    if _claim_service_notification(email, meta['user_id'], meta['kind'], event_type):
+                        claimed.append(event_type)
+                if claimed:
+                    try:
+                        _send_service_event(meta, email, claimed, client)
+                        result['sent'] += 1
+                    except Exception:
+                        # رویداد از قبل claim شده تا پس از restart اعلان تکراری ایجاد نشود.
+                        result['errors'] += 1
+
+                if end_events and meta['kind'] == 'TRIAL':
+                    conn = _db_connect()
+                    conn.execute("UPDATE trial_services SET status = 'EXPIRED' WHERE email = ? AND status = 'ACTIVE'", (email,))
+                    conn.commit()
+                    conn.close()
+            except Exception:
+                result['errors'] += 1
+        return result
+    finally:
+        SERVICE_MONITOR_LOCK.release()
+
+
+def _format_monitor_result(result):
+    if not result.get('enabled'):
+        return "🔕 سیستم اعلان سرویس‌ها غیرفعال است."
+    if result.get('busy'):
+        return "⏳ یک بررسی دیگر همین حالا در حال اجراست."
+    return (
+        "🔔 **نتیجه بررسی سرویس‌ها**\n\n"
+        f"📋 سرویس‌های تحت پیگیری: **{result.get('tracked', 0)}**\n"
+        f"✅ پیدا شده در پنل: **{result.get('found', 0)}**\n"
+        f"📨 پیام ارسال‌شده در این بررسی: **{result.get('sent', 0)}**\n"
+        f"❓ پیدا نشده در پنل: **{result.get('missing', 0)}**\n"
+        f"⚠️ خطاهای پردازش: **{result.get('errors', 0)}**"
+    )
+
+
+def _service_monitor_loop():
+    # کمی بعد از startup شروع می‌شود تا polling و recovery فرصت بالا آمدن داشته باشند.
+    time.sleep(10)
+    consecutive_errors = 0
+    while True:
+        try:
+            if service_notifications_enabled():
+                result = check_service_notifications()
+                consecutive_errors = 0 if result.get('errors', 0) == 0 else consecutive_errors + 1
+            else:
+                consecutive_errors = 0
+        except Exception as e:
+            consecutive_errors += 1
+            # برای جلوگیری از اسپم، فقط هر 12 خطای متوالی یک هشدار به ادمین داده می‌شود.
+            if consecutive_errors == 1 or consecutive_errors % 12 == 0:
+                try:
+                    bot.send_message(ADMIN_ID, f"⚠️ مانیتور سرویس‌ها نتوانست پنل را بررسی کند:\n`{str(e)[:700]}`", parse_mode="Markdown")
+                except Exception:
+                    pass
+        time.sleep(get_service_notification_interval())
+
+
+def start_service_monitor():
+    global SERVICE_MONITOR_THREAD
+    if SERVICE_MONITOR_THREAD and SERVICE_MONITOR_THREAD.is_alive():
+        return
+    SERVICE_MONITOR_THREAD = threading.Thread(target=_service_monitor_loop, name="service-monitor", daemon=True)
+    SERVICE_MONITOR_THREAD.start()
+
+
+@bot.message_handler(commands=['notifydiag'])
+def notification_diag_command(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    bot.send_message(message.chat.id, "🔎 در حال بررسی سرویس‌های ثبت‌شده و وضعیت آن‌ها در 3x-ui...")
+    result = check_service_notifications(force=True)
+    bot.send_message(message.chat.id, _format_monitor_result(result), parse_mode="Markdown")
+
+
 def generate_xui_config(user_id, plan_id, tx_id):
     """Compatibility wrapper for older callers."""
     return finalize_service_transaction(tx_id)
@@ -1873,4 +2201,5 @@ if __name__ == '__main__':
     bot.remove_webhook()
     recover_processing_transactions()
     reconcile_missing_referral_commissions()
+    start_service_monitor()
     bot.infinity_polling()

@@ -319,3 +319,8 @@ chmod +x update.sh
 ```
 
 The updater preserves `.env` and `speedping.db` and creates backups under `/root/SpeedyBot/backups/`.
+
+
+## Automatic service expiry notifications
+
+Version 2.2 includes a background monitor that checks bot-issued 3x-ui clients every 5 minutes by default. It sends a one-time 90% quota warning, an expiry warning (24h for paid services, 3h for trials), and one-time quota-exhausted / time-expired alerts. Notification events are persisted in SQLite to prevent duplicate messages across restarts. Admins can use `/notifydiag` or `/sudoadmin` → `🔔 اعلان سرویس‌ها`.
