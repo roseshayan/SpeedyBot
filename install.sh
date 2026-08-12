@@ -6,6 +6,7 @@ APP_DIR="/root/SpeedyBot"
 ENV_FILE="$APP_DIR/.env"
 RUNNER_FILE="$APP_DIR/run.sh"
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME"
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 RED="\033[0;31m"
 GREEN="\033[0;32m"
@@ -226,7 +227,7 @@ main() {
     exit 1
   fi
 
-  if [[ ! -f "$(dirname "${BASH_SOURCE[0]}")/main.py" ]]; then
+  if [[ ! -f "$SOURCE_DIR/main.py" ]]; then
     error "main.py was not found next to install.sh."
     exit 1
   fi
@@ -271,7 +272,7 @@ main() {
 
   info "Preparing application directory..."
   mkdir -p "$APP_DIR"
-  cp "$(dirname "${BASH_SOURCE[0]}")/main.py" "$APP_DIR/main.py"
+  cp "$SOURCE_DIR/main.py" "$APP_DIR/main.py"
   cd "$APP_DIR"
 
   info "Creating virtual environment..."
@@ -279,7 +280,11 @@ main() {
 
   info "Installing Python dependencies..."
   ./.venv/bin/python -m pip install --upgrade pip setuptools wheel
-  ./.venv/bin/python -m pip install pyTelegramBotAPI requests
+  if [[ -f "$SOURCE_DIR/requirements.txt" ]]; then
+    ./.venv/bin/python -m pip install -r "$SOURCE_DIR/requirements.txt"
+  else
+    ./.venv/bin/python -m pip install pyTelegramBotAPI requests
+  fi
 
   info "Writing environment file..."
   cat > "$ENV_FILE" <<EOF

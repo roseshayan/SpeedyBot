@@ -9,9 +9,19 @@ SpeedPing is a Telegram sales bot for **X-UI / Sanaei 3.3.0**. It automates the 
 - Sends the receipt to the admin for review
 - Lets the admin approve or reject the order
 - Creates a new X-UI client automatically after approval
+- Issues a free 1 GB / 1 day trial automatically from the main menu
+- Limits the free trial to one claim per Telegram user ID
+- Safely retries failed trial provisioning without creating duplicate clients
+- Shows the trial in the customer account/status section
 - Generates the subscription URL and direct config links
 - Provides a support flow
 - Includes an admin panel at `/sudoadmin`
+
+## Free trial flow
+
+The main menu contains a `🎁 دریافت تست رایگان` button. When selected, the bot creates a client named `speedping_trial_<telegram_user_id>` with a 1 GB traffic limit and a 24-hour expiry, then sends the subscription URL and direct configs to the customer.
+
+Trial claims are stored in a dedicated SQLite table, separately from the normal users table. Deleting a user from the bot therefore does not allow another free trial. If provisioning fails, the claim is marked as failed and can be retried; retries first look for an already-created panel client to avoid duplicates.
 
 ## Tested environment
 
@@ -278,3 +288,34 @@ sudo systemctl daemon-reload
 - The bot currently stores data in SQLite.
 - The default bank/card settings are stored in the database and can be adjusted in the code or through the admin functions provided by the bot.
 - This project is designed for Ubuntu-based servers with `systemd`.
+
+---
+
+# Affiliate & Wallet System — v2.0
+
+Version 2.0 adds a one-level affiliate program and an auditable internal wallet.
+
+Key behavior:
+
+- Permanent random referral codes and Telegram deep links.
+- Referrer can only be bound on a user's first-ever registration and cannot be changed later.
+- Self-referral by the same Telegram user ID is blocked.
+- Free trials never generate commissions.
+- Default commission is 10% and can be changed from `/sudoadmin`.
+- Commission is based on the cash/card-backed amount and is credited only after successful X-UI provisioning.
+- Wallet-only purchases do not generate another commission, preventing circular credit creation.
+- Exactly-once commission records prevent duplicate credits during retries or restarts.
+- Users can spend wallet balance directly on plans once the balance covers the full plan price.
+- Every credit/debit is stored in an immutable wallet ledger.
+- Admin can enable/disable affiliates, change the percentage, adjust wallets, and view top affiliates.
+- Paid X-UI provisioning is idempotent and supports ISSUE/Retry recovery.
+- Startup recovery completes transactions left in PROCESSING and reconciles missing commissions after a crash.
+
+For an existing `/root/SpeedyBot` installation, use:
+
+```bash
+chmod +x update.sh
+./update.sh
+```
+
+The updater preserves `.env` and `speedping.db` and creates backups under `/root/SpeedyBot/backups/`.
