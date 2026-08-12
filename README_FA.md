@@ -98,7 +98,7 @@ XUI_SUB_SERVER_URL=https://sub.example.com:2096
 - `XUI_API_URL` باید همراه با پروتکل و پورت باشد.
 - `XUI_BASE_PATH` باید دقیقاً با مسیر امنیتی پنل یکی باشد.
   - اگر پنل مسیر امنیتی ندارد، از `/` استفاده کنید
-  - اگر دارد، چیزی شبیه `/pKPl2UQ2sKTDnSWXb0` وارد کنید
+  - اگر دارد، چیزی شبیه `/your-secret-base-path` وارد کنید
 - `XUI_SUB_SERVER_URL` برای ساخت لینک‌هایی مثل زیر استفاده می‌شود:
   `https://sub.example.com:2096/sub/<id>`
 
@@ -552,3 +552,33 @@ journalctl -u xui-bot.service -f
 - `wallet_transactions` — ledger کامل کیف پول
 
 جدول‌های `users` و `transactions` نیز به صورت خودکار Migration می‌شوند؛ برای نسخه قبلی لازم نیست دیتابیس را حذف کنید.
+
+
+## عیب‌یابی اتصال به 3x-ui
+
+نسخه 2.1.0 مطابق REST API جدید 3x-ui از Bearer Token استفاده می‌کند. Token باید **خود مقدار plaintext تولیدشده** در `Settings → Security → API Token` باشد؛ نام Token یا Web Base Path معتبر نیست. مقدار plaintext فقط هنگام ساخت Token نمایش داده می‌شود.
+
+بعد از نصب، ادمین می‌تواند در تلگرام دستور زیر را اجرا کند:
+
+```text
+/xuidiag
+```
+
+این دستور فقط دو درخواست Read-only به Inbounds و Clients می‌فرستد و هیچ تنظیمی را تغییر نمی‌دهد.
+
+کدهای رایج:
+
+- `HTTP 200 / success=true`: اتصال و Bearer Token صحیح است.
+- `401/403`: Token اشتباه، غیرفعال یا از دست رفته است.
+- `404`: Web Base Path، نسخه پنل یا Reverse Proxy اشتباه است.
+- `5xx`: خطا از پنل یا Reverse Proxy است.
+
+در نسخه‌های جدید 3x-ui، اگر به SSH همان سرور پنل دسترسی دارید می‌توانید با دستور زیر یک API Token جدید تولید کنید؛ مقدار plaintext نمایش‌داده‌شده را همان لحظه ذخیره کنید:
+
+```bash
+x-ui setting -getApiToken
+```
+
+اگر نسخه پنل این فلگ را نداشت، از رابط پنل در `Settings → Security → API Token` یک Token جدید بسازید.
+
+مسیر Subscription نیز قابل تنظیم است و در `.env` با `XUI_SUB_PATH` ذخیره می‌شود؛ مقدار پیش‌فرض `/sub/` است.

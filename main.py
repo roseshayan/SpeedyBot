@@ -16,9 +16,10 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 # تنظیمات اتصال به پنل سنائی
 XUI_API_URL = os.getenv("XUI_API_URL")          # مثلا http://127.0.0.1:2053
-XUI_BASE_PATH = os.getenv("XUI_BASE_PATH")      # مثلا /pKPl2UQ2sKTDnSWXb0
+XUI_BASE_PATH = os.getenv("XUI_BASE_PATH")      # مثلا /your-secret-base-path
 XUI_BEARER_TOKEN = os.getenv("XUI_BEARER_TOKEN")
-XUI_SUB_SERVER_URL = os.getenv("XUI_SUB_SERVER_URL") # مثلا https://ger.speed-ping.com:2096
+XUI_SUB_SERVER_URL = os.getenv("XUI_SUB_SERVER_URL") # مثلا https://sub.example.com:2096
+XUI_SUB_PATH = os.getenv("XUI_SUB_PATH", "/sub/")  # مسیر Subscription در Settings → Subscription
 
 DEVELOPMENT_MODE = False
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -879,11 +880,11 @@ def send_xui_status(user_id, user_email):
     request_proxies = {'http': 'http://127.0.0.1:10808', 'https': 'http://127.0.0.1:10808'} if DEVELOPMENT_MODE else None
     
     try:
-        client_url = f"{XUI_API_URL}{XUI_BASE_PATH}/panel/api/clients/get/{user_email}"
+        client_url = _xui_url(f"panel/api/clients/get/{quote(str(user_email), safe='')}")
         response = requests.get(client_url, headers=headers, proxies=request_proxies, timeout=15, verify=not DEVELOPMENT_MODE)
         client_data = response.json().get("obj", {}) if response.status_code == 200 and response.json().get("success") else {}
         
-        traffic_url = f"{XUI_API_URL}{XUI_BASE_PATH}/panel/api/clients/traffic/{user_email}"
+        traffic_url = _xui_url(f"panel/api/clients/traffic/{quote(str(user_email), safe='')}")
         traffic_res = requests.get(traffic_url, headers=headers, proxies=request_proxies, timeout=15, verify=not DEVELOPMENT_MODE)
         traffic_data = traffic_res.json().get("obj", {}) if traffic_res.status_code == 200 and traffic_res.json().get("success") else {}
         
@@ -943,11 +944,11 @@ def handle_account_get_links(call):
     request_proxies = {'http': 'http://127.0.0.1:10808', 'https': 'http://127.0.0.1:10808'} if DEVELOPMENT_MODE else None
     
     if mode == "sub":
-        subscription_url = f"{XUI_SUB_SERVER_URL}/sub/{param}"
+        subscription_url = _subscription_url(param)
         bot.send_message(user_id, f"🌐 **لینک سابسکریپشن اختصاصی شما (پورت 2096):**\n\n```\n{subscription_url}\n```", parse_mode="Markdown")
     elif mode == "dir":
         bot.answer_callback_query(call.id, "در حال استخراج...")
-        get_links_url = f"{XUI_API_URL}{XUI_BASE_PATH}/panel/api/clients/links/{param}"
+        get_links_url = _xui_url(f"panel/api/clients/links/{quote(str(param), safe='')}")
         res = requests.get(get_links_url, headers=headers, proxies=request_proxies, timeout=15, verify=not DEVELOPMENT_MODE)
         config_links = res.json().get("obj", []) if res.status_code == 200 and res.json().get("success") else []
         
@@ -995,6 +996,46 @@ def forward_to_admin(message):
     bot.send_message(message.chat.id, "⏳ پیام شما به پشتیبانی ارسال شد.")
 
 # --- 👑 POWERFUL ADMIN PANEL (/sudoadmin) ---
+def _run_xui_diagnostic():
+    """Read-only checks for API path/auth; does not create, edit or delete anything."""
+    headers = _xui_headers()
+    proxies = _xui_proxies()
+    checks = [
+        ("Inbounds", _xui_url("panel/api/inbounds/list")),
+        ("Clients", _xui_url("panel/api/clients/list")),
+    ]
+    results = []
+    for name, url in checks:
+        try:
+            r = requests.get(url, headers=headers, proxies=proxies, timeout=15, verify=not DEVELOPMENT_MODE)
+            data = _safe_json(r)
+            if r.status_code == 200 and data.get("success"):
+                obj = data.get("obj")
+                count = len(obj) if isinstance(obj, list) else "OK"
+                results.append(f"✅ {name}: HTTP 200 / success=true / count={count}")
+            else:
+                results.append("❌ " + _xui_response_error(r, name))
+        except requests.exceptions.SSLError as e:
+            results.append(f"❌ {name}: خطای TLS/SSL: {str(e)[:300]}")
+        except requests.exceptions.RequestException as e:
+            results.append(f"❌ {name}: خطای شبکه: {str(e)[:300]}")
+        except Exception as e:
+            results.append(f"❌ {name}: {str(e)[:400]}")
+    return "\n\n".join(results)
+
+
+@bot.message_handler(commands=['xuidiag'])
+def xui_diag_command(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    bot.send_message(message.chat.id, "🔎 در حال تست Read-only اتصال 3x-ui...")
+    bot.send_message(
+        message.chat.id,
+        "🧪 نتیجه تست 3x-ui:\n\n" + _run_xui_diagnostic() +
+        "\n\nاین تست هیچ کاربر یا Inboundی را تغییر نمی‌دهد."
+    )
+
+
 @bot.message_handler(commands=['sudoadmin'])
 def super_admin_panel(message):
     if message.from_user.id != ADMIN_ID:
@@ -1114,7 +1155,7 @@ def handle_admin_panel_callbacks(call):
     elif action == "server_status":
         bot.answer_callback_query(call.id, "در حال استعلام وضعیت زنده...")
         try:
-            status_url = f"{XUI_API_URL}{XUI_BASE_PATH}/panel/api/server/status"
+            status_url = _xui_url("panel/api/server/status")
             res = requests.get(status_url, headers=headers, proxies=request_proxies, timeout=15, verify=not DEVELOPMENT_MODE)
             if res.status_code == 200 and res.json().get("success"):
                 obj = res.json().get("obj", {})
@@ -1352,7 +1393,7 @@ def process_delete_panel_sub(message):
     request_proxies = {'http': 'http://127.0.0.1:10808', 'https': 'http://127.0.0.1:10808'} if DEVELOPMENT_MODE else None
     
     try:
-        del_url = f"{XUI_API_URL}{XUI_BASE_PATH}/panel/api/clients/del/{email}?keepTraffic=0"
+        del_url = _xui_url(f"panel/api/clients/del/{quote(str(email), safe='')}") + "?keepTraffic=0"
         res = requests.post(del_url, headers=headers, proxies=request_proxies, timeout=15, verify=not DEVELOPMENT_MODE)
         if res.status_code == 200 and res.json().get("success"):
             bot.send_message(ADMIN_ID, f"✅ اشتراک `{email}` با موفقیت از پنل حذف شد.")
@@ -1363,8 +1404,55 @@ def process_delete_panel_sub(message):
 def _xui_headers():
     return {
         "Authorization": f"Bearer {XUI_BEARER_TOKEN}",
+        "Accept": "application/json",
         "Content-Type": "application/json"
     }
+
+
+def _xui_url(endpoint):
+    """Build a 3x-ui API URL while safely honoring the configured web base path."""
+    base = (XUI_API_URL or "").strip().rstrip("/")
+    base_path = (XUI_BASE_PATH or "").strip()
+    if not base:
+        raise RuntimeError("XUI_API_URL تنظیم نشده است.")
+    if base_path in ("", "/"):
+        prefix = ""
+    else:
+        prefix = "/" + base_path.strip("/")
+    return f"{base}{prefix}/{endpoint.lstrip('/')}"
+
+
+def _subscription_url(sub_id):
+    base = (XUI_SUB_SERVER_URL or "").strip().rstrip("/")
+    path = (XUI_SUB_PATH or "/sub/").strip()
+    if not path.startswith("/"):
+        path = "/" + path
+    if not path.endswith("/"):
+        path += "/"
+    return f"{base}{path}{quote(str(sub_id), safe='')}"
+
+
+def _xui_response_error(response, action):
+    """Return a useful diagnostic without ever exposing the Bearer token."""
+    status = getattr(response, "status_code", "?")
+    url = getattr(response, "url", "")
+    body = (getattr(response, "text", "") or "").strip()
+    if len(body) > 500:
+        body = body[:500] + "…"
+    if not body:
+        body = "<empty response body>"
+
+    hint = ""
+    if status in (401, 403):
+        hint = (" | راهنما: احراز هویت رد شده. XUI_BEARER_TOKEN باید خود Token تولیدشده در "
+                "Settings → Security → API Token باشد، نه نام Token و نه Web Base Path.")
+    elif status == 404:
+        hint = (" | راهنما: مسیر API پیدا نشد. XUI_BASE_PATH، نسخه 3x-ui و Reverse Proxy را بررسی کنید. "
+                "Endpointهای جدید زیر /panel/api/* هستند.")
+    elif isinstance(status, int) and status >= 500:
+        hint = " | راهنما: خطا از خود پنل/Reverse Proxy است؛ لاگ 3x-ui را بررسی کنید."
+
+    return f"{action} | HTTP {status} | URL: {url} | پاسخ: {body}{hint}"
 
 
 def _xui_proxies():
@@ -1384,7 +1472,7 @@ def _safe_json(response):
 
 
 def _get_active_inbound_ids(headers, request_proxies):
-    get_inbounds_url = f"{XUI_API_URL}{XUI_BASE_PATH}/panel/api/inbounds/list"
+    get_inbounds_url = _xui_url("panel/api/inbounds/list")
     response = requests.get(
         get_inbounds_url,
         headers=headers,
@@ -1394,7 +1482,7 @@ def _get_active_inbound_ids(headers, request_proxies):
     )
     data = _safe_json(response)
     if response.status_code != 200 or not data.get("success"):
-        raise RuntimeError(f"خطا در دریافت Inboundها از پنل: {response.text[:300]}")
+        raise RuntimeError(_xui_response_error(response, "خطا در دریافت Inboundها از پنل"))
 
     inbounds = data.get("obj", []) or []
     active_ids = [ib["id"] for ib in inbounds if ib.get("enable", True) and ib.get("id") is not None]
@@ -1404,7 +1492,7 @@ def _get_active_inbound_ids(headers, request_proxies):
 
 
 def _get_client_data(user_email, headers, request_proxies):
-    client_url = f"{XUI_API_URL}{XUI_BASE_PATH}/panel/api/clients/get/{user_email}"
+    client_url = _xui_url(f"panel/api/clients/get/{quote(str(user_email), safe='')}")
     response = requests.get(
         client_url,
         headers=headers,
@@ -1419,7 +1507,7 @@ def _get_client_data(user_email, headers, request_proxies):
 
 
 def _get_client_links(user_email, headers, request_proxies):
-    get_links_url = f"{XUI_API_URL}{XUI_BASE_PATH}/panel/api/clients/links/{user_email}"
+    get_links_url = _xui_url(f"panel/api/clients/links/{quote(str(user_email), safe='')}")
     response = requests.get(
         get_links_url,
         headers=headers,
@@ -1433,19 +1521,26 @@ def _get_client_links(user_email, headers, request_proxies):
     return []
 
 
-def _extract_subscription_id(client_data, config_links):
-    sub_id = client_data.get("subId") or client_data.get("subid") or client_data.get("uuid") or client_data.get("id")
-    if sub_id:
-        return str(sub_id)
+def _extract_subscription_id(client_data, config_links=None):
+    # طبق API رسمی، لینک Subscription فقط باید از subId ساخته شود.
+    # UUID/ID کلاینت جایگزین معتبر subId نیست.
+    sub_id = (client_data or {}).get("subId") or (client_data or {}).get("subid")
+    return str(sub_id) if sub_id else None
 
-    # fallback برای نسخه‌هایی از پنل که subId را از endpoint کلاینت برنمی‌گردانند
-    if config_links:
-        try:
-            first_link = config_links[0]
-            if "@" in first_link:
-                return first_link.split("@", 1)[0].split("//")[-1]
-        except Exception:
-            pass
+
+def _get_client_subscription_id(user_email, headers, request_proxies, client_data=None):
+    sub_id = _extract_subscription_id(client_data or {})
+    if sub_id:
+        return sub_id
+
+    # Endpoint رسمی traffic نیز subId را برمی‌گرداند و fallback مطمئنی است.
+    traffic_url = _xui_url(f"panel/api/clients/traffic/{quote(str(user_email), safe='')}")
+    response = requests.get(
+        traffic_url, headers=headers, proxies=request_proxies, timeout=15, verify=not DEVELOPMENT_MODE
+    )
+    data = _safe_json(response)
+    if response.status_code == 200 and data.get("success"):
+        return _extract_subscription_id(data.get("obj") or {})
     return None
 
 
@@ -1491,7 +1586,7 @@ def generate_trial_xui_config(user_id, user_email):
                 "inboundIds": active_inbound_ids
             }
 
-            add_client_url = f"{XUI_API_URL}{XUI_BASE_PATH}/panel/api/clients/add"
+            add_client_url = _xui_url("panel/api/clients/add")
             add_response = requests.post(
                 add_client_url,
                 json=payload,
@@ -1502,13 +1597,13 @@ def generate_trial_xui_config(user_id, user_email):
             )
             add_data = _safe_json(add_response)
             if add_response.status_code != 200 or not add_data.get("success"):
-                raise RuntimeError(f"پنل ساخت اکانت تست را رد کرد: {add_response.text[:300]}")
+                raise RuntimeError(_xui_response_error(add_response, "پنل ساخت اکانت تست را رد کرد"))
 
             time.sleep(1.0)
             client_data = _get_client_data(user_email, headers, request_proxies)
 
         config_links = _get_client_links(user_email, headers, request_proxies)
-        sub_id = _extract_subscription_id(client_data, config_links)
+        sub_id = _get_client_subscription_id(user_email, headers, request_proxies, client_data)
 
         if not sub_id and not config_links:
             raise RuntimeError("اکانت ساخته شد اما پنل هیچ لینک سابسکریپشن یا کانفیگی برنگرداند.")
@@ -1538,7 +1633,7 @@ def generate_trial_xui_config(user_id, user_email):
     )
 
     if sub_id:
-        subscription_url = f"{XUI_SUB_SERVER_URL}/sub/{sub_id}"
+        subscription_url = _subscription_url(sub_id)
         msg_text += f"🌐 **لینک سابسکریپشن:**\n```\n{subscription_url}\n```\n"
 
     if config_links:
@@ -1585,7 +1680,7 @@ def provision_xui_service(user_id, plan_id, tx_id, user_email):
             },
             "inboundIds": active_inbound_ids
         }
-        add_client_url = f"{XUI_API_URL}{XUI_BASE_PATH}/panel/api/clients/add"
+        add_client_url = _xui_url("panel/api/clients/add")
         response = requests.post(
             add_client_url,
             json=payload,
@@ -1600,13 +1695,13 @@ def provision_xui_service(user_id, plan_id, tx_id, user_email):
             time.sleep(0.8)
             client_data = _get_client_data(user_email, headers, request_proxies)
             if not client_data:
-                raise RuntimeError(f"پنل ساخت سرویس را رد کرد: {response.text[:300]}")
+                raise RuntimeError(_xui_response_error(response, "پنل ساخت سرویس را رد کرد"))
         else:
             time.sleep(1.0)
             client_data = _get_client_data(user_email, headers, request_proxies)
 
     config_links = _get_client_links(user_email, headers, request_proxies)
-    sub_id = _extract_subscription_id(client_data, config_links)
+    sub_id = _get_client_subscription_id(user_email, headers, request_proxies, client_data)
     if not sub_id and not config_links:
         raise RuntimeError("سرویس روی پنل وجود دارد اما هیچ لینک قابل تحویلی دریافت نشد.")
     return sub_id, config_links
@@ -1620,7 +1715,7 @@ def _send_paid_service(user_id, plan_id, tx_id, sub_id, config_links):
         f"🆔 کد تراکنش: `{tx_id}`\n\n"
     )
     if sub_id:
-        subscription_url = f"{XUI_SUB_SERVER_URL}/sub/{sub_id}"
+        subscription_url = _subscription_url(sub_id)
         msg_text += f"🌐 **لینک سابسکریپشن:**\n```\n{subscription_url}\n```\n"
     if config_links:
         msg_text += "\n🔑 **کانفیگ‌های اتصال مستقیم:**\n"

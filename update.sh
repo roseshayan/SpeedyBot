@@ -50,7 +50,16 @@ if [[ -f "$APP_DIR/speedping.db" ]]; then
   cp "$APP_DIR/speedping.db" "$DB_BACKUP"
 fi
 
-cp "$SOURCE_DIR/main.py" "$APP_DIR/main.py"
+if [[ "$SOURCE_DIR" != "$APP_DIR" ]]; then
+  # Replace application source/docs/scripts but deliberately preserve runtime state:
+  # .env, speedping.db, .venv and backups are never copied or removed.
+  for file in main.py install.sh update.sh requirements.txt README.md README_FA.md CHANGELOG.md VERSION.txt .gitignore; do
+    if [[ -f "$SOURCE_DIR/$file" ]]; then
+      cp "$SOURCE_DIR/$file" "$APP_DIR/$file"
+    fi
+  done
+  chmod +x "$APP_DIR/install.sh" "$APP_DIR/update.sh" 2>/dev/null || true
+fi
 "$APP_DIR/.venv/bin/python3" -m py_compile "$APP_DIR/main.py"
 
 systemctl daemon-reload

@@ -186,10 +186,32 @@ prompt_sub_url() {
   done
 }
 
+normalize_sub_path() {
+  local value="$1"
+  value="$(trim "$value")"
+  [[ -z "$value" ]] && value="/sub/"
+  [[ "$value" != /* ]] && value="/$value"
+  [[ "$value" != */ ]] && value="$value/"
+  printf '%s' "$value"
+}
+
+prompt_sub_path() {
+  local value
+  while true; do
+    value="$(prompt_value "Subscription URI path (Settings -> Subscription)" "/sub/")"
+    value="$(normalize_sub_path "$value")"
+    if [[ "$value" =~ ^/[^[:space:]]*/$ ]]; then
+      printf '%s' "$value"
+      return 0
+    fi
+    warn "Invalid subscription path. Example: /sub/"
+  done
+}
+
 prompt_bearer_token() {
   local value
   while true; do
-    value="$(prompt_secret "Panel bearer token")"
+    value="$(prompt_secret "Panel Bearer API Token (plaintext value, NOT token name)")"
     # Remove any possible whitespace or control characters
     value="$(echo "$value" | tr -d '\n\r\t')"
     if [[ -n "$value" ]]; then
@@ -239,7 +261,7 @@ main() {
   echo
   echo "============================================================"
   echo " SpeedPing Telegram Bot installer"
-  echo " Tested on Ubuntu 24.04 and Sanaei panel 3.3.0"
+  echo " Ubuntu 24.04 + current Sanaei/3x-ui /panel/api/* REST API"
   echo "============================================================"
   echo
 
@@ -249,6 +271,7 @@ main() {
   XUI_BASE_PATH="$(prompt_base_path)"
   XUI_BEARER_TOKEN="$(prompt_bearer_token)"
   XUI_SUB_SERVER_URL="$(prompt_sub_url)"
+  XUI_SUB_PATH="$(prompt_sub_path)"
 
   echo
   info "Summary:"
@@ -257,6 +280,7 @@ main() {
   printf '  X-UI API URL:           %s\n' "$XUI_API_URL"
   printf '  X-UI base path:         %s\n' "$XUI_BASE_PATH"
   printf '  Subscription base URL:  %s\n' "$XUI_SUB_SERVER_URL"
+  printf '  Subscription URI path:  %s\n' "$XUI_SUB_PATH"
   printf '  App directory:          %s\n' "$APP_DIR"
   echo
 
@@ -268,11 +292,15 @@ main() {
   export DEBIAN_FRONTEND=noninteractive
   info "Updating package index and installing system dependencies..."
   apt-get update
-  apt-get install -y python3 python3-pip python3-venv
+  apt-get install -y python3 python3-pip python3-venv curl
 
   info "Preparing application directory..."
   mkdir -p "$APP_DIR"
-  cp "$SOURCE_DIR/main.py" "$APP_DIR/main.py"
+  if [[ "$SOURCE_DIR" != "$APP_DIR" ]]; then
+    cp "$SOURCE_DIR/main.py" "$APP_DIR/main.py"
+  else
+    info "Source is already $APP_DIR; skipping main.py self-copy."
+  fi
   cd "$APP_DIR"
 
   info "Creating virtual environment..."
@@ -294,8 +322,56 @@ export XUI_API_URL=$(printf '%q' "$XUI_API_URL")
 export XUI_BASE_PATH=$(printf '%q' "$XUI_BASE_PATH")
 export XUI_BEARER_TOKEN=$(printf '%q' "$XUI_BEARER_TOKEN")
 export XUI_SUB_SERVER_URL=$(printf '%q' "$XUI_SUB_SERVER_URL")
+export XUI_SUB_PATH=$(printf '%q' "$XUI_SUB_PATH")
 EOF
   chmod 600 "$ENV_FILE"
+
+  info "Testing 3x-ui API authentication and base path (read-only)..."
+  set +e
+  PREFLIGHT_OUTPUT="$(
+    XUI_API_URL="$XUI_API_URL" XUI_BASE_PATH="$XUI_BASE_PATH" XUI_BEARER_TOKEN="$XUI_BEARER_TOKEN" \
+    "$APP_DIR/.venv/bin/python3" - <<'PY'
+import os, sys, requests
+base = os.environ['XUI_API_URL'].rstrip('/')
+path = os.environ.get('XUI_BASE_PATH', '').strip()
+prefix = '' if path in ('', '/') else '/' + path.strip('/')
+url = f"{base}{prefix}/panel/api/inbounds/list"
+try:
+    r = requests.get(url, headers={
+        'Authorization': 'Bearer ' + os.environ['XUI_BEARER_TOKEN'],
+        'Accept': 'application/json'
+    }, timeout=15)
+except Exception as e:
+    print(f"NETWORK_ERROR|{type(e).__name__}: {e}")
+    sys.exit(20)
+body = (r.text or '').strip().replace('\n', ' ')[:500] or '<empty response body>'
+print(f"HTTP_{r.status_code}|{url}|{body}")
+try:
+    ok = r.status_code == 200 and bool(r.json().get('success'))
+except Exception:
+    ok = False
+if ok:
+    sys.exit(0)
+if r.status_code in (401, 403):
+    sys.exit(21)
+if r.status_code == 404:
+    sys.exit(22)
+sys.exit(23)
+PY
+  )"
+  PREFLIGHT_CODE=$?
+  set -e
+  if [[ "$PREFLIGHT_CODE" -ne 0 ]]; then
+    error "3x-ui API preflight failed: $PREFLIGHT_OUTPUT"
+    case "$PREFLIGHT_CODE" in
+      21) error "Bearer auth was rejected. Use the PLAINTEXT API Token created in Settings -> Security -> API Token; do not use its name or the web base path." ;;
+      22) error "API returned 404. Check X-UI web base path, panel version, and reverse proxy routing." ;;
+      20) error "Could not connect to the panel. Check DNS/firewall/TLS and panel port." ;;
+      *)  error "Panel returned an unexpected response. Check the response above and 3x-ui logs." ;;
+    esac
+    exit 1
+  fi
+  success "3x-ui API preflight passed: $PREFLIGHT_OUTPUT"
 
   info "Creating service runner..."
   cat > "$RUNNER_FILE" <<'EOF'

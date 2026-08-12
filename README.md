@@ -80,7 +80,7 @@ XUI_SUB_SERVER_URL=https://sub.example.com:2096
   - Incorrect: `http://127.0.0.1:2053/panel`
 - `XUI_BASE_PATH` must match the Sanaei panel security path.
   - If the panel has no security path, use `/`
-  - If it has one, use something like `/pKPl2UQ2sKTDnSWXb0`
+  - If it has one, use something like `/your-secret-base-path`
 - `XUI_SUB_SERVER_URL` must be only the base URL for the subscription server.
   - Correct: `https://sub.example.com:2096`
   - Incorrect: `https://sub.example.com:2096/sub`
