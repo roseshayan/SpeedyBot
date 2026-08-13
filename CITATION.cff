@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use or redistribute SpeedyBot, please cite the project and its original author."
+title: "SpeedyBot"
+version: "3.0.0"
+date-released: 2026-08-13
+authors:
+  - name: "SudoShayanNA"
+    email: "namayandeshayan@gmail.com"
+repository-code: "https://github.com/roseshayan/SpeedyBot"
+url: "https://github.com/roseshayan/SpeedyBot"
+license: MIT
