@@ -1,4 +1,7 @@
 .venv/
 __pycache__/
+*.pyc
 *.db
+.env
+backups/
 bot.log

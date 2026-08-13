@@ -1,4 +1,31 @@
 # Changelog
+
+## 3.0.0 - Sales & management suite
+
+- Added Sanaei client-group integration using the official Clients Groups API.
+  - Paid services are assigned to `Customers`.
+  - Free trials are assigned to `Trial`.
+  - `/groupsdiag` and the admin Groups screen show the live group count and member counts.
+  - Startup reconciliation migrates previously issued bot services into the correct groups.
+- Replaced hard-coded plans with SQLite-backed plan management.
+  - Default catalog: unlimited 30-day plans for 1/2/3 users at 250k/300k/350k Toman.
+  - `limitIp` is 1/2/3 respectively.
+  - Admins can add, edit, enable or disable plans.
+- Added service renewal while preserving the existing subscription identity.
+  - Early renewals extend from the later of current expiry or now.
+  - Renewal updates quota/IP limit, re-enables the client and resets the new period traffic.
+- Added optional extra-volume packs for limited-volume plans.
+- Added QR generation for subscription links.
+- Added user purchase history and improved service/account views.
+- Added discount codes, gift-wallet codes and configurable cashback.
+- Added phone-number verification and mandatory Telegram-channel membership gates (disabled by default).
+- Added multiple bot admins; the original `ADMIN_ID` remains Owner.
+- Added configurable welcome/FAQ content and configurable deterministic/random service usernames.
+- Added automatic SQLite backups with retention plus manual admin backup.
+- Expanded sales analytics with purchase/renewal/volume breakdown, today's revenue and live panel group/online counts.
+- Added safe public-GitHub updater (`./update.sh`) with pre-deploy validation, backups and rollback.
+- Tightened safety/idempotency around wallet refunds, receipt retry, subscription IDs and notification tracking.
+
 ## 2.2.0 - Service notifications
 
 - Added automatic background monitoring for bot-issued paid and trial services.

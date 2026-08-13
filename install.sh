@@ -311,7 +311,7 @@ main() {
   if [[ -f "$SOURCE_DIR/requirements.txt" ]]; then
     ./.venv/bin/python -m pip install -r "$SOURCE_DIR/requirements.txt"
   else
-    ./.venv/bin/python -m pip install pyTelegramBotAPI requests
+    ./.venv/bin/python -m pip install pyTelegramBotAPI requests "qrcode[pil]"
   fi
 
   info "Writing environment file..."
