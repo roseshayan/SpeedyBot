@@ -1,14 +1,11 @@
 version: 2
 updates:
   - package-ecosystem: pip
-    directory: /
+    directory: "/"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
-    labels:
-      - dependencies
-    commit-message:
-      prefix: chore
-
-# SpeedyBot by SudoShayanNA
-# https://github.com/roseshayan/SpeedyBot
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

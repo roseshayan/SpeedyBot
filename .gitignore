@@ -1,32 +1,22 @@
-# SpeedyBot runtime / secrets
-.env
-.env.local
-*.db
-*.db-wal
-*.db-shm
-*.sqlite
-*.sqlite3
-backups/
-bot.log
-*.log
-
 # Python
 .venv/
 venv/
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
 .pytest_cache/
-.mypy_cache/
-.ruff_cache/
 
-# Build / packaging
-build/
-dist/
-*.egg-info/
+# Runtime / secrets
+.env
+.env.local
+*.db
+*.db-wal
+*.db-shm
+backups/
+bot.log
+*.log
+run.sh
 
-# Editors / OS
+# IDE / OS
 .vscode/
 .idea/
 .DS_Store
@@ -34,6 +24,5 @@ Thumbs.db
 
 # Temporary files
 *.tmp
-*.temp
 *.bak
-*~
+*.swp

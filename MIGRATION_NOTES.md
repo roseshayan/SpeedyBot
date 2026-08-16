@@ -1,44 +1,50 @@
-# SpeedyBot v3 Migration Notes
+# SpeedyBot migration notes
 
-## Existing production database
+## v3.0.x → v3.1.0
 
-The migration is additive. Do not delete `speedping.db` or `.env`.
+No new environment variables are required. Keep your existing `.env` and `speedping.db`.
 
-When v3 starts for the first time it automatically:
-- adds the new plan, discount, gift, cashback and admin tables;
-- adds new transaction snapshot fields;
-- preserves existing users, wallet balances, referrals, trials and transactions;
-- seeds three plans only when the `plans` table is empty;
-- preserves historical v2.x plan-1 transactions as 30-day unlimited / IP limit 2 snapshots;
-- starts background group reconciliation for bot-issued services.
+On first start, SpeedyBot automatically creates the new SQLite tables used for:
 
-## Default v3 plans
+- Trial inbound routing (`trial_inbounds`)
+- Per-plan inbound routing (`plan_inbounds`)
+- Platform connection-guide content (`guide_items`)
+- Acquisition/source survey (`user_acquisition`)
+- Trial sales follow-ups (`trial_followups`)
+- Existing-service links (`linked_services`)
+- Existing-service ownership claims (`service_claims`)
 
-1. Unlimited / 30 days / 1 user — 250,000 Toman — IP limit 1
-2. Unlimited / 30 days / 2 users — 300,000 Toman — IP limit 2
-3. Unlimited / 30 days / 3 users — 350,000 Toman — IP limit 3
+New settings are seeded safely with these defaults:
 
-## Sanaei groups
+- Free trial: enabled
+- Connection guides: enabled
+- Acquisition survey: enabled
+- Trial follow-up: enabled
+- Trial follow-up delay: 6 hours
+- Custom service names: enabled
+- Link existing service: enabled
 
-Default target groups:
-- paid services: `Customers`
-- free trials: `Trial`
+If an inbound selector has no explicit rows, SpeedyBot preserves backward-compatible behavior and uses **all active inbounds**. Selecting specific inbounds in `/sudoadmin` changes that scope to the chosen list.
 
-Check live panel groups after deployment:
-
-```text
-/groupsdiag
-```
-
-Or use `/sudoadmin` → Sanaei Groups → Reconcile.
-
-## Upgrade from an existing installation
-
-If GitHub already contains v3:
+### Recommended upgrade procedure
 
 ```bash
 cd /root/SpeedyBot
+./update.sh --check
 ./update.sh
+systemctl status xui-bot.service --no-pager -l
+journalctl -u xui-bot.service -n 100 --no-pager
 ```
 
-If you are uploading this ZIP manually before pushing v3 to GitHub, copy the v3 project files into `/root/SpeedyBot` while preserving `.env`, `speedping.db`, `.venv` and `backups`, then restart the service. The v3 updater refuses an accidental downgrade to an older GitHub VERSION unless `--force` is explicitly used.
+After upgrade, open `/sudoadmin` and review:
+
+1. `🧪 تست و Inboundها`
+2. `📲 راهنمای اتصال`
+3. `📈 CRM و پیگیری`
+4. `👥 گروه‌های Sanaei`
+
+Then test one free trial with a new Telegram account and verify that the returned direct URLs match 3x-ui's **Copy URL** output for the selected inbounds.
+
+## Rollback
+
+`update.sh` creates a timestamped backup before deployment. If the new service does not remain healthy, the updater attempts automatic rollback. Runtime data (`.env`, SQLite database and backups) is not replaced by repository defaults.

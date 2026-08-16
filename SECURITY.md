@@ -1,29 +1,23 @@
 # Security Policy
 
-SpeedyBot is self-hosted software and may process private configuration and customer data. Keep production secrets and runtime data out of the public repository.
-
-## Safe deployment
-
-- Keep the operating system and dependencies updated.
-- Use HTTPS for public-facing services.
-- Keep private configuration files and databases outside public web directories.
-- Review logs and screenshots before sharing them publicly.
-- Rotate any credential that has been accidentally exposed.
-- Use the software only on infrastructure you own or are authorized to administer.
-
-## Reporting security issues
-
-Please report sensitive security issues privately instead of posting exploit details in a public issue.
-
 Maintainer: **SudoShayanNA**
 
-- Email: `namayandeshayan@gmail.com`
-- Telegram: `@SudoShayanNA`
-- GitHub: https://github.com/roseshayan
-- Project: https://github.com/roseshayan/SpeedyBot
+## Reporting a vulnerability
 
-When reporting a problem, include the SpeedyBot version, relevant environment/version information, reproduction steps using non-production sample data, and the expected/actual behavior.
+Please do **not** publish working credentials, customer subscription URLs, Telegram bot tokens, 3x-ui API tokens, database dumps, or other private deployment data in a public GitHub Issue.
 
----
+For sensitive security reports, contact:
 
-Copyright © 2026 SudoShayanNA
+- Email: namayandeshayan@gmail.com
+- Telegram: @SudoShayanNA
+
+Include the affected SpeedyBot version, relevant component, reproduction steps, expected/actual behavior and a redacted log if useful.
+
+## Deployment reminders
+
+- Keep `.env` outside version control and restrict its permissions.
+- Treat the 3x-ui Bearer token as an administrative credential.
+- Treat subscription URLs, direct proxy URIs and QR codes as credentials.
+- Keep Ubuntu, Python packages and 3x-ui updated.
+- Restrict SSH and panel exposure appropriately.
+- Rotate any token immediately if it is accidentally published.

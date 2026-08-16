@@ -1,24 +1,24 @@
-# Contributing
+# Contributing to SpeedyBot
 
-Contributions to SpeedyBot are welcome.
+Thanks for helping improve SpeedyBot.
 
-Before submitting a change, please keep it focused, explain what changed and why, and update the English/Persian documentation when user-facing behavior changes.
+## Recommended workflow
 
-For bug reports, include the SpeedyBot version, operating-system version, relevant application version, expected behavior, actual behavior and sanitized logs. Do not include private user data or production secrets.
+1. Fork the repository.
+2. Create a focused branch.
+3. Keep changes small and explain the reason for them.
+4. Never commit `.env`, API tokens, bot tokens, databases or real subscription URLs.
+5. Run syntax checks before opening a PR:
 
-Preferred commit prefixes:
+```bash
+python3 -m py_compile main.py
+bash -n install.sh
+bash -n update.sh
+```
 
-- `feat:` new functionality
-- `fix:` bug fixes
-- `docs:` documentation
-- `refactor:` internal cleanup
-- `chore:` maintenance
+6. Update documentation and `CHANGELOG.md` when behavior changes.
+7. Open a Pull Request with reproduction/testing details.
 
-SpeedyBot was created and is maintained by **SudoShayanNA**.
+For security vulnerabilities, follow `SECURITY.md` instead of opening a public Issue.
 
-- GitHub: https://github.com/roseshayan
-- Telegram: https://t.me/SudoShayanNA
-- Email: namayandeshayan@gmail.com
-- Repository: https://github.com/roseshayan/SpeedyBot
-
-Please preserve the project license and original author attribution in substantial forks and derivative distributions.
+Maintainer: **SudoShayanNA** — https://github.com/roseshayan/SpeedyBot

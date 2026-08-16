@@ -1,5 +1,43 @@
 # Changelog
 
+## 3.1.0 - Trial delivery, inbound routing & lightweight CRM
+
+### Fixed
+- Fixed free-trial direct-link delivery. SpeedyBot now retrieves direct protocol URLs from the official 3x-ui client link APIs instead of treating a subscription URL as a direct configuration.
+- Filters direct-delivery results to actual proxy URI schemes (`vless://`, `vmess://`, `trojan://`, `ss://`, `hysteria://`, `hysteria2://`, `hy2://`).
+- Retry/idempotent provisioning now re-syncs an existing client to the configured Trial/Plan inbound set instead of leaving stale inbound attachments.
+
+### Added
+- Per-purpose inbound routing from the Telegram admin panel:
+  - choose inbounds used for free trials;
+  - choose a different inbound set for every plan;
+  - reset a scope to “all active inbounds”;
+  - renewals can move the existing client to the inbound set of the selected renewal plan.
+- Admin switch to enable/disable free trials without editing source code.
+- Platform-specific connection guides managed entirely from Telegram admin:
+  - Android, iOS/iPhone, Windows, macOS, Linux and Android TV/TV Box;
+  - text, photo and video items using Telegram file IDs, plus preview/reordering;
+  - automatic guide CTA after paid/trial delivery plus a permanent user-menu entry.
+- Optional acquisition survey after the first successful paid purchase (“How did you hear about us?”) with admin analytics.
+- Trial-expiry sales follow-up CRM:
+  - configurable on/off switch and delay (1–168 hours);
+  - skips users who already purchased;
+  - asks structured reasons for not buying;
+  - provides purchase/support CTA;
+  - works even when service-expiry notification messages are disabled.
+- Optional custom service names during purchase, with server-side validation and duplicate-name detection against both the local database and 3x-ui.
+- Secure linking of previously purchased/existing 3x-ui clients to a Telegram account:
+  - automatic claim when the panel client `tgId` matches the Telegram user;
+  - otherwise an admin approval workflow is created;
+  - one panel client cannot be claimed by multiple bot users.
+- Linked external services appear in the user account and are included in service monitoring.
+- Expanded CRM dashboard with acquisition response rate, follow-up counts, pre-follow-up conversions, linked-service count and pending claims.
+
+### Security / behavior notes
+- Existing-service import does not trust a typed email alone; ownership is verified by `tgId` or explicit admin approval.
+- Direct proxy URLs and subscription URLs remain separate concepts in UI and delivery.
+- No new environment variables are required. SQLite schema migration is automatic at startup.
+
 ## 3.0.0 - Sales & management suite
 
 - Added Sanaei client-group integration using the official Clients Groups API.

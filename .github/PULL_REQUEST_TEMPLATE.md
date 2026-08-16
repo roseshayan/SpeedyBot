@@ -1,28 +1,13 @@
 ## Summary
 
-Describe the change and why it is needed.
+## Why is this change needed?
 
-## Type of change
+## Testing performed
 
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Documentation
-- [ ] Refactor / maintenance
+- [ ] `python3 -m py_compile main.py`
+- [ ] `bash -n install.sh`
+- [ ] `bash -n update.sh`
+- [ ] No secrets/customer configs are included
+- [ ] Documentation/changelog updated when behavior changed
 
-## Validation
-
-Describe how you tested the change.
-
-- [ ] Python source compiles successfully
-- [ ] Shell scripts pass syntax checks when changed
-- [ ] Existing installation/migration behavior was considered
-- [ ] English/Persian documentation was updated when user-facing behavior changed
-- [ ] No private customer data or production credentials are included
-
-## Notes
-
-Anything maintainers should know before review.
-
----
-
-SpeedyBot by **SudoShayanNA** — https://github.com/roseshayan/SpeedyBot
+## Compatibility / migration notes

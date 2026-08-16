@@ -1,103 +1,176 @@
-# SpeedyBot v3.0.0
+# SpeedyBot v3.1.0
 
-> ربات تلگرام فروش و مدیریت سرویس برای **3x-ui / Sanaei**
->
-> **سازنده:** [SudoShayanNA](https://github.com/roseshayan) · [Telegram](https://t.me/SudoShayanNA) · `namayandeshayan@gmail.com`
+<p align="center">
+  <strong>ربات متن‌باز فروش و مدیریت اشتراک VPN برای پنل 3x-ui / Sanaei</strong><br>
+  فروش خودکار • تست رایگان • تمدید • کیف پول • همکاری در فروش • مدیریت Inbound • CRM • راهنمای اتصال
+</p>
 
-[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](VERSION.txt)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg)](https://www.python.org/)
-[![Ubuntu](https://img.shields.io/badge/Ubuntu-24.04-E95420.svg)](https://ubuntu.com/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+<p align="center">
+  <a href="README.md">🇬🇧 English README</a> ·
+  <a href="CHANGELOG.md">تغییرات نسخه‌ها</a> ·
+  <a href="SECURITY.md">امنیت</a> ·
+  <a href="CONTRIBUTING.md">مشارکت</a>
+</p>
 
-[English documentation](README.md)
+> **سازنده و نگهدارنده پروژه: SudoShayanNA**  
+> تلگرام: **@SudoShayanNA** · ایمیل: **namayandeshayan@gmail.com**  
+> سورس رسمی: **https://github.com/roseshayan/SpeedyBot**
+
+SpeedyBot یک ربات تلگرام عملی برای فروش و مدیریت سرویس‌های پنل **3x-ui / Sanaei** است. ربات می‌تواند بعد از تأیید پرداخت Client بسازد، تست رایگان بدهد، پلان و تمدید را مدیریت کند، لینک Subscription و کانفیگ مستقیم تحویل دهد، کیف پول و همکاری در فروش داشته باشد، نزدیک اتمام سرویس هشدار بدهد و بخش بزرگی از مدیریت روزمره را از داخل تلگرام انجام دهد.
+
+ربات با API جدید `/panel/api/*` پنل 3x-ui و Bearer Token کار می‌کند، اطلاعات خودش را در SQLite نگه می‌دارد و روی Ubuntu به‌صورت سرویس `systemd` اجرا می‌شود.
 
 ---
 
-## معرفی
+## فهرست
 
-SpeedyBot برای اتصال Telegram به پنل **3x-ui / Sanaei** ساخته شده و کارهای اصلی فروش و مدیریت سرویس را خودکار می‌کند. اطلاعات کاربران و تراکنش‌ها در SQLite ذخیره می‌شود، ارتباط با پنل از API رسمی `/panel/api/*` و Bearer Token انجام می‌شود و ربات روی Ubuntu به‌صورت systemd service اجرا می‌شود.
+- [امکانات](#امکانات)
+- [پلان‌های پیش‌فرض](#پلانهای-پیشفرض)
+- [پیش‌نیازها](#پیشنیازها)
+- [قبل از نصب](#قبل-از-نصب)
+- [نصب مرحله‌به‌مرحله](#نصب-مرحلهای)
+- [کارهای ضروری بعد از نصب](#کارهای-ضروری-بعد-از-نصب)
+- [پنل مدیریت](#پنل-مدیریت)
+- [تست رایگان و انتخاب Inbound](#تست-رایگان-و-انتخاب-inbound)
+- [راهنمای اتصال کاربران](#راهنمای-اتصال-کاربران)
+- [CRM و پیگیری بعد از تست](#crm-و-پیگیری-بعد-از-تست)
+- [نام دلخواه و سرویس قدیمی](#نام-دلخواه-و-سرویس-قدیمی)
+- [پرداخت و بازاریابی](#پرداخت-و-بازاریابی)
+- [تمدید](#تمدید)
+- [Groups](#groups)
+- [اعلان‌ها](#اعلانها)
+- [عیب‌یابی](#عیبیابی)
+- [آپدیت](#آپدیت)
+- [بکاپ و امنیت](#بکاپ-و-امنیت)
+- [سازنده و لایسنس](#سازنده-و-لایسنس)
 
-پرداخت نسخه عمومی فعلی بر پایه **کارت‌به‌کارت با ارسال فیش و تأیید ادمین + کیف پول** است.
+---
 
 ## امکانات
 
-- ساخت خودکار Client روی Inboundهای فعال پنل.
-- تست رایگان ۱ گیگابایت / ۱ روز، فقط یک بار برای هر Telegram ID.
-- مدیریت داینامیک پلن‌ها از `/sudoadmin`.
-- تنظیم `limitIp` مطابق تعداد کاربر انتخابی.
-- سه پلن اولیه:
-  - ۱ کاربر، ۳۰ روز نامحدود، ۲۵۰٬۰۰۰ تومان، `limitIp=1`
-  - ۲ کاربر، ۳۰ روز نامحدود، ۳۰۰٬۰۰۰ تومان، `limitIp=2`
-  - ۳ کاربر، ۳۰ روز نامحدود، ۳۵۰٬۰۰۰ تومان، `limitIp=3`
-- تمدید همان Client و حفظ Subscription فعلی.
-- بسته حجم اضافه برای پلن‌های حجمی.
-- Subscription Link، لینک‌های کانفیگ و QR Code.
-- سرویس پولی در Group `Customers` و تست در Group `Trial`.
-- ساخت و Reconcile گروه‌های لازم در Sanaei.
-- حساب کاربری، تاریخچه خرید و وضعیت سرویس.
+### فروش و ساخت خودکار سرویس
+
+- ساخت Client در 3x-ui بعد از تأیید پرداخت.
+- تست رایگان پیش‌فرض: **۱ گیگابایت / ۱ روز / ۱ IP**.
+- پلان‌های داینامیک داخل SQLite و قابل مدیریت از ادمین.
+- `limitIp` مستقل برای هر پلان.
+- پرداخت کارت‌به‌کارت/ارسال رسید و تأیید ادمین.
+- خرید مستقیم از کیف پول.
+- Retry و Idempotency برای جلوگیری از ساخت ناخواسته Client تکراری در خطا/Restart.
+- لینک Subscription، کانفیگ مستقیم و QR.
+- تمدید همان Client با حفظ هویت و Subscription.
+- بسته حجم اضافه برای پلان‌های حجمی.
+
+### انتخاب Inbound برای Trial و هر Plan
+
+از نسخه 3.1 می‌توانید تعیین کنید:
+
+- تست رایگان روی کدام Inboundها ساخته شود.
+- Plan ID 1 روی کدام Inboundها باشد.
+- Plan ID 2 روی کدام Inboundها باشد.
+- هر پلان دیگری که بعداً اضافه می‌کنید روی چه Inboundهایی باشد.
+
+اگر برای یک بخش هیچ انتخاب مشخصی ذخیره نشده باشد، ربات برای سازگاری با نسخه‌های قدیمی از **تمام Inboundهای فعال** استفاده می‌کند.
+
+در Retry هم اگر Client از قبل ساخته شده باشد، Inboundهای آن با تنظیم فعلی همگام می‌شوند. موقع تمدید به یک پلان دیگر نیز Inboundهای همان پلان اعمال می‌شوند.
+
+### امکانات کاربر
+
+- حساب کاربری.
+- وضعیت زنده حجم و زمان.
+- دریافت Subscription.
+- دریافت کانفیگ‌های مستقیم.
+- QR سابسکریپشن.
+- تمدید سرویس.
+- تاریخچه خرید/تمدید/حجم اضافه.
 - کیف پول و تاریخچه تراکنش‌ها.
-- Affiliate / Referral یک‌سطحی.
-- Cashback، Discount Code و Gift Code.
+- کد هدیه و کد تخفیف.
+- لینک همکاری در فروش.
+- راهنمای اتصال بر اساس پلتفرم.
 - احراز شماره موبایل اختیاری.
-- عضویت اجباری کانال به‌صورت اختیاری.
+- عضویت اجباری کانال اختیاری.
+
+### بازاریابی و CRM
+
+- Affiliate/Referral یک‌سطحی.
+- Cashback قابل تنظیم.
+- کد تخفیف درصدی یا مبلغ ثابت.
+- Gift Code برای شارژ کیف پول.
+- پرسش اختیاری «از کجا با ما آشنا شدید؟» بعد از خرید موفق.
+- پیگیری خودکار کاربری که تستش تمام شده ولی خرید نکرده است.
+- ثبت علت نخریدن و آمار مدیریتی.
+
+### مدیریت
+
+از `/sudoadmin`:
+
+- مدیریت پلان‌ها.
+- مدیریت Volume Packها.
+- روشن/خاموش کردن تست رایگان.
+- انتخاب Inbound تست و تک‌تک پلان‌ها.
+- ساخت راهنمای اتصال با متن/عکس/ویدئو.
+- CRM و Follow-up.
+- کیف پول کاربران.
+- همکاری در فروش.
+- Cashback و کدها.
+- Groups پنل Sanaei.
+- تنظیم اطلاعات کارت بانکی.
+- ویرایش Welcome و FAQ.
 - چند ادمین.
-- FAQ و Welcome قابل ویرایش.
-- بکاپ دستی و خودکار SQLite.
-- هشدار نزدیک اتمام حجم/زمان و اعلان پایان سرویس.
-- Updater مستقیم GitHub همراه با Backup، Health Check و Rollback.
+- بکاپ دستی/خودکار.
+- مدیریت اعلان‌های سرویس.
 
 ---
 
-# پیش‌نیازها
+## پلان‌های پیش‌فرض
 
-برای نصب پیشنهاد می‌شود داشته باشی:
+در دیتابیس تازه این سه پلان ساخته می‌شوند:
 
-- Ubuntu 24.04 LTS
-- دسترسی `root`
-- Python 3.10 یا جدیدتر
-- پنل 3x-ui / Sanaei با API جدید
-- Telegram Bot Token
-- Telegram Numeric ID ادمین اصلی
+| پلان | مدت | حجم | IP Limit | قیمت پیش‌فرض |
+|---|---:|---:|---:|---:|
+| نامحدود ۱ کاربر | ۳۰ روز | نامحدود | 1 | ۲۵۰٬۰۰۰ تومان |
+| نامحدود ۲ کاربر | ۳۰ روز | نامحدود | 2 | ۳۰۰٬۰۰۰ تومان |
+| نامحدود ۳ کاربر | ۳۰ روز | نامحدود | 3 | ۳۵۰٬۰۰۰ تومان |
+
+این قیمت‌ها صرفاً Seed اولیه پروژه هستند. بعد از نصب از پنل ادمین با مدل فروش خودتان تغییرشان دهید.
+
+---
+
+## پیش‌نیازها
+
+پیشنهاد برای Production:
+
+- Ubuntu **24.04 LTS**
+- Python 3.12
+- پنل 3x-ui/Sanaei با API جدید
 - Bearer API Token پنل
-- آدرس Subscription Server
+- Bot Token تلگرام
+- Telegram ID عددی ادمین اصلی
+- Subscription Server فعال برای لینک Subscription
+- دسترسی خروجی سرور به Telegram و پنل
 
-ربات و پنل می‌توانند روی یک سرور یا دو سرور جدا باشند؛ فقط سرور ربات باید بتواند به API پنل متصل شود.
+ربات با Polling کار می‌کند؛ بنابراین برای خود Telegram نیازی به باز کردن پورت Webhook ندارید.
 
 ---
 
-# آماده‌سازی قبل از نصب
+## قبل از نصب
 
-## ۱. ساخت Telegram Bot
+### ۱) ساخت ربات تلگرام
 
-داخل Telegram به `@BotFather` برو:
+در `@BotFather`:
 
-```text
-/newbot
-```
+1. `/newbot` را بزنید.
+2. نام نمایشی انتخاب کنید.
+3. Username تمام‌شونده به `bot` انتخاب کنید.
+4. Token را کپی کنید.
 
-نام و Username ربات را انتخاب کن و Token را ذخیره کن.
+Token را هیچ‌وقت در Issue عمومی، اسکرین‌شات، README یا Commit نگذارید.
 
-نمونه فرمت Token:
+### ۲) Telegram ID ادمین
 
-```text
-123456789:AAExampleTelegramBotToken
-```
+Telegram ID عددی حساب مالک را پیدا کنید. این مقدار `ADMIN_ID` اولیه است و Owner اصلی باقی می‌ماند.
 
-Token واقعی را داخل GitHub، Issue، Screenshot یا پیام عمومی منتشر نکن.
-
-## ۲. پیدا کردن Telegram ID
-
-Numeric ID اکانت اصلی خودت را پیدا کن. این عدد در Installer به‌عنوان `ADMIN_ID` استفاده می‌شود.
-
-نمونه:
-
-```text
-123456789
-```
-
-Username مثل `@username` قابل استفاده نیست.
-
-## ۳. ساخت API Token در Sanaei
+### ۳) ساخت API Token در 3x-ui
 
 داخل پنل:
 
@@ -105,37 +178,37 @@ Username مثل `@username` قابل استفاده نیست.
 Settings → Security → API Token
 ```
 
-Token جدید بساز و مقدار **plaintext** آن را همان لحظه ذخیره کن.
+Token جدید بسازید و **مقدار plaintext واقعی Token** را همان لحظه ذخیره کنید.
 
-مهم: نام Token، رمز پنل و Web Base Path جای API Token قابل استفاده نیستند.
+اسم Token، رمز ورود پنل و Security Base Path، Bearer Token نیستند.
 
-## ۴. مشخص کردن API URL و Base Path
+### ۴) تفاوت Base URL و Base Path
 
-اگر URL پنل این باشد:
+اگر پنل شما این است:
 
 ```text
-https://panel.example.com:2053/my-secret-path/
+https://panel.example.com:2053/secret-panel/
 ```
 
-مقادیر Installer باید این باشند:
+در Installer:
 
 ```text
 X-UI API base URL: https://panel.example.com:2053
-X-UI security base path: /my-secret-path
+X-UI security base path: /secret-panel
 ```
 
-اگر Base Path نداری:
+اگر مسیر مخفی ندارید:
 
 ```text
 /
 ```
 
-## ۵. مشخص کردن Subscription
+### ۵) Subscription
 
-اگر لینک Subscription نهایی به شکل زیر است:
+مثلاً اگر لینک واقعی کاربران این باشد:
 
 ```text
-https://sub.example.com:2096/sub/XXXXXXXX
+https://sub.example.com:2096/sub/ABC123
 ```
 
 مقادیر Installer:
@@ -145,115 +218,48 @@ Subscription server base URL: https://sub.example.com:2096
 Subscription URI path: /sub/
 ```
 
-اگر URI را در پنل عوض کرده‌ای همان مقدار جدید را وارد کن.
-
 ---
 
-# نصب مرحله‌به‌مرحله
+## نصب مرحله‌ای
 
-وارد Ubuntu شو:
-
-```bash
-ssh root@SERVER_IP
-```
-
-Git را نصب کن:
+با root وارد VPS شوید:
 
 ```bash
 apt update
 apt install -y git
-```
 
-پروژه را دریافت کن:
-
-```bash
 git clone https://github.com/roseshayan/SpeedyBot.git /root/SpeedyBot
 cd /root/SpeedyBot
 chmod +x install.sh update.sh
 ./install.sh
 ```
 
-Installer این موارد را می‌پرسد:
+Installer به ترتیب می‌پرسد:
 
 1. Telegram Bot Token
-2. Telegram Admin Numeric ID
-3. X-UI API Base URL
-4. X-UI Security Base Path
+2. Telegram Admin numeric ID
+3. X-UI API base URL
+4. X-UI security base path
 5. Panel Bearer API Token
-6. Subscription Server Base URL
-7. Subscription URI Path
+6. Subscription server base URL
+7. Subscription URI path
 
-سپس Python environment، وابستگی‌ها، `.env` و systemd service را می‌سازد و قبل از پایان، API پنل را به‌صورت Read-only تست می‌کند.
+قبل از راه‌اندازی سرویس، Installer یک تست Read-only روی API انجام می‌دهد تا Token یا Base Path اشتباه همان ابتدا مشخص شود.
 
-نام سرویس:
-
-```text
-xui-bot.service
-```
-
----
-
-# معنی سؤال‌های Installer
-
-### Telegram bot token
-Token دقیق BotFather.
-
-### Telegram admin numeric ID
-Numeric ID مالک ربات، نه Username.
-
-### X-UI API base URL
-درست:
+### فایل‌هایی که نصب ساخته/استفاده می‌کند
 
 ```text
-https://panel.example.com:2053
+/root/SpeedyBot/.env
+/root/SpeedyBot/.venv/
+/root/SpeedyBot/speedping.db
+/root/SpeedyBot/run.sh
+/etc/systemd/system/xui-bot.service
 ```
 
-Path را اینجا اضافه نکن.
-
-### X-UI security base path
-مثلاً:
-
-```text
-/secret-path
-```
-
-یا اگر نداری:
-
-```text
-/
-```
-
-### Panel Bearer API Token
-مقدار plaintext API Token پنل.
-
-### Subscription server base URL
-مثلاً:
-
-```text
-https://sub.example.com:2096
-```
-
-### Subscription URI path
-معمولاً:
-
-```text
-/sub/
-```
-
----
-
-# اولین تست بعد از نصب
-
-وضعیت سرویس:
+بررسی وضعیت:
 
 ```bash
 systemctl status xui-bot.service --no-pager -l
-```
-
-باید ببینی:
-
-```text
-Active: active (running)
 ```
 
 لاگ زنده:
@@ -262,128 +268,7 @@ Active: active (running)
 journalctl -u xui-bot.service -f
 ```
 
-داخل Telegram:
-
-```text
-/start
-```
-
-و از اکانت Owner:
-
-```text
-/xuidiag
-/groupsdiag
-/notifydiag
-/sudoadmin
-```
-
-پیشنهاد می‌شود قبل از فروش واقعی:
-
-- مشخصات کارت/بانک را تنظیم کنی.
-- پلن‌ها را بازبینی کنی.
-- درصد Referral و Cashback را چک کنی.
-- یک خرید تستی انجام بدهی.
-- Free Trial را با یک اکانت دیگر تست کنی.
-
----
-
-# دستورات اصلی ادمین
-
-| دستور | کاربرد |
-|---|---|
-| `/sudoadmin` | پنل اصلی مدیریت |
-| `/xuidiag` | تست اتصال و Authentication پنل |
-| `/groupsdiag` | نمایش Groupهای Sanaei و تعداد اعضا |
-| `/notifydiag` | تست مانیتور سرویس |
-
-بیشتر تنظیمات از دکمه‌های داخل `/sudoadmin` انجام می‌شوند.
-
----
-
-# Groups در Sanaei
-
-SpeedyBot برای نظم پنل از دو Group اصلی استفاده می‌کند:
-
-```text
-Customers
-Trial
-```
-
-- خرید موفق → `Customers`
-- تست رایگان → `Trial`
-
-اگر Group لازم وجود نداشته باشد، ربات می‌تواند آن را ایجاد کند. برای دیدن Groupهای واقعی پنل خودت:
-
-```text
-/groupsdiag
-```
-
----
-
-# تمدید سرویس
-
-کاربر از حساب کاربری می‌تواند همان سرویس فعلی را تمدید کند. تمدید می‌تواند تاریخ انقضا، حجم و `limitIp` را مطابق پلن جدید تغییر دهد و لازم نیست برای هر تمدید یک Subscription بی‌ربط جدید ایجاد شود.
-
-اگر کاربر قبل از پایان زمان فعلی تمدید کند، سیستم برای حفظ اعتبار باقی‌مانده طراحی شده است.
-
----
-
-# کیف پول و بازاریابی
-
-## Wallet
-تمام افزایش/کاهش‌های موجودی در Ledger ذخیره می‌شود و ادمین می‌تواند موجودی کاربر را مدیریت کند.
-
-## Referral
-هر کاربر می‌تواند لینک دعوت اختصاصی بگیرد. Self-referral رد می‌شود و پورسانت واجد شرایط بعد از خرید موفق فقط یک‌بار ثبت می‌شود.
-
-## Cashback
-از پنل ادمین قابل فعال‌سازی و تنظیم است.
-
-## Discount Code
-کد تخفیف درصدی یا مبلغ ثابت با محدودیت‌هایی مثل تاریخ انقضا، حداقل خرید و تعداد مصرف.
-
-## Gift Code
-برای شارژ کیف پول کاربران.
-
----
-
-# اعلان سرویس
-
-مانیتور به‌صورت دوره‌ای سرویس‌ها را بررسی می‌کند. پیش‌فرض‌های معمول:
-
-- هشدار در ۹۰٪ مصرف حجم.
-- هشدار ۲۴ ساعت مانده به پایان سرویس پولی.
-- هشدار ۳ ساعت مانده به پایان تست.
-- اعلان اتمام حجم.
-- اعلان اتمام زمان.
-
-اعلان‌های ارسال‌شده ثبت می‌شوند تا با Restart تکرار نشوند.
-
----
-
-# تنظیمات و `.env`
-
-Secretها در این فایل ذخیره می‌شوند:
-
-```text
-/root/SpeedyBot/.env
-```
-
-نمونه امن در [.env.example](.env.example) قرار دارد.
-
-متغیرهای اصلی:
-
-```bash
-BOT_TOKEN='...'
-ADMIN_ID='123456789'
-XUI_API_URL='https://panel.example.com:2053'
-XUI_BASE_PATH='/secret-path'
-XUI_BEARER_TOKEN='...'
-XUI_SUB_SERVER_URL='https://sub.example.com:2096'
-XUI_SUB_PATH='/sub/'
-```
-
-بعد از تغییر دستی `.env`:
+Restart:
 
 ```bash
 systemctl restart xui-bot.service
@@ -391,9 +276,340 @@ systemctl restart xui-bot.service
 
 ---
 
-# آپدیت مستقیم از GitHub
+## کارهای ضروری بعد از نصب
 
-فقط بررسی آخرین نسخه:
+از حساب ادمین بزنید:
+
+```text
+/sudoadmin
+```
+
+قبل از فروش واقعی این موارد را تنظیم کنید:
+
+1. اطلاعات کارت/بانک پیش‌فرض را عوض کنید.
+2. پلان‌ها و قیمت‌ها را بررسی کنید.
+3. وارد **🧪 تست و Inboundها** شوید.
+4. Trial را بر اساس نیاز روشن/خاموش کنید.
+5. برای Trial و هر Plan Inbound انتخاب کنید.
+6. `Customers` و `Trial` را از Groups همگام کنید.
+7. برای Android/iOS/Windows... راهنمای اتصال بسازید.
+8. تنظیمات CRM را بررسی کنید.
+9. در صورت نیاز Phone Verification/Channel Membership را فعال کنید.
+10. `/xuidiag`، `/groupsdiag` و `/notifydiag` را اجرا کنید.
+11. با یک Telegram ID دیگر یک تست واقعی بگیرید.
+
+---
+
+## پنل مدیریت
+
+دستور اصلی:
+
+```text
+/sudoadmin
+```
+
+دستورات تشخیصی:
+
+```text
+/xuidiag
+/groupsdiag
+/notifydiag
+```
+
+- `/xuidiag`: تست Read-only API پنل.
+- `/groupsdiag`: Groupهای زنده و تعداد Clientها.
+- `/notifydiag`: اجرای دستی مانیتور سرویس‌ها.
+
+---
+
+## تست رایگان و انتخاب Inbound
+
+مسیر:
+
+```text
+/sudoadmin → 🧪 تست و Inboundها
+```
+
+امکانات:
+
+- روشن/خاموش کردن Trial.
+- انتخاب Inboundهای Trial.
+- انتخاب جداگانه Inbound برای هر Plan ID.
+- Reset هر بخش روی «همه Inboundهای فعال».
+
+### رفع باگ لینک تست در v3.1
+
+در نسخه‌های قبلی گزارش شده بود بعضی کانفیگ‌های Trial آدرس درست ندارند یا یک URL سابسکریپشن در خروجی کانفیگ مستقیم دیده می‌شود.
+
+در v3.1 این دو مفهوم کاملاً جدا شده‌اند. Direct Config فقط Schemeهای واقعی Proxy را قبول می‌کند:
+
+```text
+vless://
+vmess://
+trojan://
+ss://
+hysteria://
+hysteria2://
+hy2://
+```
+
+`http://` و `https://` در بخش کانفیگ مستقیم نمایش داده نمی‌شوند و فقط لینک Subscription در بخش مخصوص خودش تحویل می‌شود.
+
+خود آدرس Direct Link از API رسمی 3x-ui گرفته می‌شود تا با خروجی **Copy URL** پنل یکی باشد. بنابراین اگر خود Copy URL پنل هم Host اشتباه داشته باشد، باید Share Address/تنظیم عمومی Inbound را در پنل اصلاح کنید؛ SpeedyBot عمداً IP/Domain را حدس نمی‌زند.
+
+---
+
+## راهنمای اتصال کاربران
+
+مسیر ادمین:
+
+```text
+/sudoadmin → 📲 راهنمای اتصال
+```
+
+پلتفرم‌های آماده:
+
+- Android
+- iPhone / iOS
+- Windows
+- macOS
+- Linux
+- Android TV / TV Box
+
+برای هر پلتفرم می‌توانید چند آیتم اضافه کنید:
+
+- متن
+- عکس + Caption
+- ویدئو + Caption
+- پیش‌نمایش راهنمای نهایی
+- تغییر ترتیب آیتم‌ها با ID و Sort Order
+
+فایل‌ها دوباره داخل دیتابیس ذخیره نمی‌شوند؛ ربات `file_id` تلگرام را نگه می‌دارد.
+
+بعد از صدور تست یا خرید، دکمه **📲 راهنمای اضافه کردن کانفیگ** برای کاربر فرستاده می‌شود. همین راهنما از منوی اصلی و صفحه سرویس هم قابل دسترسی است.
+
+مثلاً برای Android می‌توانید این ترتیب را بسازید:
+
+1. متن معرفی برنامه پیشنهادی.
+2. عکس محل دکمه Add Subscription.
+3. ویدئوی ۳۰ ثانیه‌ای وارد کردن لینک.
+4. متن نکات Update/Refresh.
+
+---
+
+## CRM و پیگیری بعد از تست
+
+مسیر:
+
+```text
+/sudoadmin → 📈 CRM و پیگیری
+```
+
+### از کجا با ما آشنا شدید؟
+
+قابل روشن/خاموش کردن است و بعد از اولین خرید موفق پرسیده می‌شود.
+
+گزینه‌های پیش‌فرض:
+
+- معرفی دوستان
+- سرچ در تلگرام
+- تبلیغات کانال‌ها
+- اینستاگرام
+- وب/جستجو
+- مشتری قبلی
+- سایر
+
+ربات نرخ پاسخ و تعداد هر منبع را در Admin نشان می‌دهد. این اطلاعات برای فهمیدن کانال تبلیغاتی مؤثر مفید است.
+
+### Follow-up بعد از Trial
+
+وقتی حجم یا زمان Trial تمام شود، ربات Follow-up را برای مدت مشخصی بعد زمان‌بندی می‌کند؛ پیش‌فرض **۶ ساعت** و قابل تنظیم بین ۱ تا ۱۶۸ ساعت.
+
+قبل از ارسال، ربات بررسی می‌کند کاربر سرویس اصلی خریده یا نه. اگر خریده باشد پیام مزاحم فرستاده نمی‌شود.
+
+اگر نخریده باشد می‌پرسد علت اصلی چیست، مثلاً:
+
+- سرعت/کیفیت
+- قیمت
+- مشکل در راه‌اندازی
+- بعداً می‌خرم
+- فعلاً نیاز ندارم
+- آماده خرید هستم
+- سایر
+
+بعد بر اساس پاسخ، CTA خرید یا پشتیبانی نمایش داده می‌شود.
+
+نکته: حتی اگر اعلان‌های معمول اتمام حجم/زمان را خاموش کنید، تشخیص پایان Trial برای CRM به‌صورت مستقل کار می‌کند.
+
+---
+
+## نام دلخواه و سرویس قدیمی
+
+### نام دلخواه هنگام خرید
+
+در صورت فعال بودن، کاربر می‌تواند بین «نام خودکار» و «نام دلخواه» انتخاب کند.
+
+نام دلخواه:
+
+- ۳ تا ۴۰ کاراکتر
+- فقط حروف انگلیسی، عدد، `.`, `_`, `-`
+- قبل از پرداخت داخل دیتابیس SpeedyBot بررسی می‌شود.
+- داخل خود 3x-ui هم بررسی می‌شود.
+- اگر تکراری باشد کاربر باید نام دیگری وارد کند.
+
+### اتصال کانفیگ/سرویس خریداری‌شده قبلی
+
+از حساب کاربری، کاربر نام Client موجود در 3x-ui را وارد می‌کند.
+
+برای امنیت صرف دانستن اسم کافی نیست:
+
+- اگر `tgId` Client در پنل با Telegram ID همان کاربر یکی باشد، سرویس خودکار متصل می‌شود.
+- اگر یکی نباشد، Claim برای ادمین ارسال می‌شود و باید تأیید/رد شود.
+- هر Client فقط به یک حساب SpeedyBot قابل اتصال است.
+
+بعد از تأیید، سرویس در حساب کاربر دیده می‌شود و وضعیت آن قابل مشاهده است.
+
+---
+
+## پرداخت و بازاریابی
+
+### پرداخت کارت‌به‌کارت
+
+ربات مشخصات بانکی تنظیم‌شده را نشان می‌دهد، کاربر تصویر رسید می‌فرستد و ادمین تأیید می‌کند. بعد از تأیید، ساخت سرویس انجام می‌شود.
+
+حتماً مشخصات تستی/پیش‌فرض پروژه را از `/sudoadmin` عوض کنید.
+
+### کیف پول
+
+- موجودی کاربر.
+- Ledger تراکنش‌ها.
+- شارژ/کسر دستی ادمین.
+- خرید مستقیم با موجودی کافی.
+
+### همکاری در فروش
+
+- لینک دعوت دائمی.
+- ثبت معرف فقط بار اول.
+- پورسانت بعد از خرید واجد شرایط و ساخت موفق سرویس.
+- جلوگیری از پرداخت دوباره پورسانت برای یک تراکنش.
+
+### Cashback / Discount / Gift
+
+از ادمین می‌توانید:
+
+- Cashback را تعیین کنید.
+- کد تخفیف درصدی بسازید.
+- تخفیف مبلغ ثابت بسازید.
+- حداقل خرید/تاریخ انقضا/تعداد استفاده تعیین کنید.
+- Gift Code برای شارژ Wallet بسازید.
+
+---
+
+## تمدید
+
+کاربر از حساب خودش می‌تواند سرویس را تمدید کند.
+
+رفتار Renewal:
+
+- همان Client و Subscription حفظ می‌شود.
+- اگر قبل از اتمام تمدید شود، زمان باقی‌مانده از بین نمی‌رود.
+- حجم/IP Limit با پلان تمدید هماهنگ می‌شود.
+- Client دوباره Enable می‌شود.
+- Traffic دوره جدید Reset می‌شود.
+- در v3.1 Inboundهای Client هم با پلان انتخاب‌شده برای تمدید Sync می‌شوند.
+
+---
+
+## Groups
+
+به‌صورت پیش‌فرض:
+
+```text
+سرویس پولی → Customers
+تست رایگان → Trial
+```
+
+ربات می‌تواند Groupهای لازم را بسازد/همگام کند و در Startup سرویس‌های قبلی خودش را Reconcile کند.
+
+بررسی زنده:
+
+```text
+/groupsdiag
+```
+
+---
+
+## اعلان‌ها
+
+مانیتور سرویس به‌صورت پیش‌فرض هر حدود ۵ دقیقه وضعیت Clientهای تحت مدیریت را می‌خواند و رویدادهای یک‌باره دارد:
+
+- هشدار ۹۰٪ مصرف حجم
+- هشدار نزدیک اتمام سرویس پولی
+- هشدار نزدیک اتمام Trial
+- پایان حجم
+- پایان زمان
+
+رویدادهای ارسال‌شده در SQLite ثبت می‌شوند تا Restart باعث تکرار بی‌دلیل پیام نشود.
+
+---
+
+## عیب‌یابی
+
+### ربات جواب نمی‌دهد
+
+```bash
+systemctl status xui-bot.service --no-pager -l
+journalctl -u xui-bot.service -n 150 --no-pager
+```
+
+### خطای 401 یا 403
+
+Bearer Token واقعی API را بررسی کنید. اسم Token یا Password پنل را جای Token نگذارید.
+
+### خطای 404
+
+این موارد را بررسی کنید:
+
+- API Base URL
+- Web Base Path
+- Reverse Proxy
+- نسخه/API پنل
+
+برای:
+
+```text
+https://panel.example.com:2053/secret/
+```
+
+تنظیم معمول:
+
+```text
+XUI_API_URL=https://panel.example.com:2053
+XUI_BASE_PATH=/secret
+```
+
+### Subscription درست است ولی Direct Address غلط است
+
+در v3.1 خروجی Direct از API رسمی لینک Client خوانده می‌شود. خروجی ربات را با **Copy URL** خود پنل مقایسه کنید. اگر هر دو اشتباه‌اند، Share Address/Public Host همان Inbound را در 3x-ui اصلاح کنید.
+
+### یک Inbound برای Trial لینک مستقیم تولید نمی‌کند
+
+بعضی Protocolها فرم Share URL ندارند. در `🧪 تست و Inboundها` فقط Inboundهای مناسب Proxy را برای Trial انتخاب کنید.
+
+### ویرایش env
+
+```bash
+nano /root/SpeedyBot/.env
+systemctl restart xui-bot.service
+```
+
+محتویات `.env` را در Issue عمومی نفرستید.
+
+---
+
+## آپدیت
+
+بررسی:
 
 ```bash
 cd /root/SpeedyBot
@@ -406,133 +622,55 @@ cd /root/SpeedyBot
 ./update.sh
 ```
 
-Deploy اجباری آخرین Commit:
+نصب مجدد آخرین Commit:
 
 ```bash
 ./update.sh --force
 ```
 
-Updater قبل از Deploy فایل‌ها را Validate می‌کند، از `.env`، دیتابیس و سورس فعلی Backup می‌گیرد، سرویس را Restart و Health Check می‌کند و در صورت شکست Rollback انجام می‌دهد.
+Updater قبل از Deploy:
+
+- نسخه جدید را در `/tmp` Clone می‌کند.
+- Syntax پایتون و Shell را بررسی می‌کند.
+- Dependencyها را نصب می‌کند.
+- سرویس را برای بکاپ SQLite متوقف می‌کند.
+- از `.env`، DB/WAL/SHM و سورس قبلی بکاپ می‌گیرد.
+- نسخه جدید را Deploy می‌کند.
+- سرویس را Health Check می‌کند.
+- در خرابی تلاش می‌کند Rollback انجام دهد.
+
+قبل از آپدیت‌های Major فایل [MIGRATION_NOTES.md](MIGRATION_NOTES.md) را بخوانید.
 
 ---
 
-# بکاپ
+## بکاپ و امنیت
 
-فایل‌های مهم:
+بکاپ خودکار SQLite به‌صورت پیش‌فرض فعال است و از پنل ادمین بکاپ دستی هم دارید.
+
+برای کسب‌وکار واقعی فقط به همان VPS اکتفا نکنید و نسخه‌ای از بکاپ را روی فضای/سیستم دیگری نگه دارید.
+
+اطلاعات حیاتی:
 
 ```text
-/root/SpeedyBot/speedping.db
 /root/SpeedyBot/.env
+/root/SpeedyBot/speedping.db
 /root/SpeedyBot/backups/
 ```
 
-برای بکاپ دستی:
+نکات امنیتی:
 
-```bash
-systemctl stop xui-bot.service
-cp -a /root/SpeedyBot/speedping.db /root/speedping.db.backup
-cp -a /root/SpeedyBot/.env /root/speedybot.env.backup
-systemctl start xui-bot.service
-```
+- `.env` را Commit نکنید.
+- Token تلگرام/API پنل را Public نکنید.
+- Subscription/Direct Config/QR مثل Password هستند.
+- SSH و Ubuntu و 3x-ui را به‌روز نگه دارید.
+- برای Panel و Subscription خارجی TLS استفاده کنید.
+- Claim سرویس قدیمی به‌عمد نیاز به `tgId` یکسان یا تأیید ادمین دارد تا کسی با حدس‌زدن اسم Client سرویس دیگری را تصاحب نکند.
 
-بکاپ‌ها را عمومی نکن.
-
----
-
-# دستورات کاربردی سرور
-
-وضعیت:
-
-```bash
-systemctl status xui-bot.service --no-pager -l
-```
-
-لاگ زنده:
-
-```bash
-journalctl -u xui-bot.service -f
-```
-
-آخرین 150 خط:
-
-```bash
-journalctl -u xui-bot.service -n 150 --no-pager
-```
-
-Restart:
-
-```bash
-systemctl restart xui-bot.service
-```
-
-ویرایش `.env`:
-
-```bash
-nano /root/SpeedyBot/.env
-```
+جزئیات بیشتر: [SECURITY.md](SECURITY.md)
 
 ---
 
-# عیب‌یابی
-
-## ربات جواب نمی‌دهد
-
-```bash
-systemctl status xui-bot.service --no-pager -l
-journalctl -u xui-bot.service -n 150 --no-pager
-```
-
-موارد رایج: Token تلگرام اشتباه، اجرای همزمان دو Bot Process، خطای Runtime یا مشکل شبکه.
-
-## خطای 401 / 403 از 3x-ui
-
-Bearer Token را بررسی کن. باید **مقدار plaintext API Token** باشد، نه اسم Token، رمز پنل یا Base Path.
-
-```text
-/xuidiag
-```
-
-## خطای 404
-
-`XUI_BASE_PATH`، نسخه پنل و Reverse Proxy را بررسی کن.
-
-تقسیم درست:
-
-```text
-XUI_API_URL=https://panel.example.com:2053
-XUI_BASE_PATH=/secret
-```
-
-## Subscription کار نمی‌کند
-
-Subscription Server، Port، Domain/TLS، `XUI_SUB_SERVER_URL` و `XUI_SUB_PATH` را بررسی کن.
-
-## Group assignment مشکل دارد
-
-```text
-/groupsdiag
-/xuidiag
-```
-
-را اجرا کن.
-
----
-
-# امنیت
-
-حتماً [SECURITY.md](SECURITY.md) را بخوان.
-
-- `.env` را Commit نکن.
-- Bot Token و API Token را عمومی نکن.
-- اگر Secret لو رفت، فوراً Rotate کن.
-- از HTTPS برای Endpointهای عمومی استفاده کن.
-- Backupها را داخل Web Root قرار نده.
-- Subscription Link و QR را مثل رمز عبور نگه دار.
-- فقط روی زیرساختی استفاده کن که مالک آن هستی یا اجازه مدیریت آن را داری.
-
----
-
-# ساختار پروژه
+## فایل‌های پروژه
 
 ```text
 SpeedyBot/
@@ -541,47 +679,42 @@ SpeedyBot/
 ├── update.sh
 ├── requirements.txt
 ├── VERSION.txt
-├── .env.example
 ├── README.md
 ├── README_FA.md
 ├── CHANGELOG.md
 ├── MIGRATION_NOTES.md
+├── RELEASE_NOTES_v3.1.0.md
 ├── SECURITY.md
+├── SUPPORT.md
 ├── CONTRIBUTING.md
 ├── AUTHOR.md
-├── CITATION.cff
-└── LICENSE
+├── LICENSE
+├── .env.example
+└── .github/
 ```
 
-فایل‌های Runtime مثل `.env`، `speedping.db`، `.venv/` و `backups/` نباید داخل GitHub Commit شوند.
+فایل‌های Runtime مثل `.env`، دیتابیس، `.venv`، Backup و Log توسط `.gitignore` از Git خارج می‌شوند.
 
 ---
 
-# مشارکت
+## محدوده پروژه و آینده
 
-Bug Report و Pull Request خوش‌آمد است. ابتدا [CONTRIBUTING.md](CONTRIBUTING.md) را بخوان.
+مواردی مثل Web Admin مستقل، درگاه پرداخت آنلاین چندگانه، Multi-Panel، Telegram Mini App و سیستم Batch/Reseller چندسطحی ماژول‌های بزرگ‌تری هستند و بهتر است با معماری جدا و تست کافی وارد پروژه شوند، نه به‌صورت Patch عجولانه.
 
-قبل از ارسال Log یا Screenshot حتماً Tokenها، اطلاعات کاربران و Subscription URLها را حذف کن.
-
----
-
-# سازنده
-
-**SpeedyBot توسط SudoShayanNA ساخته و نگهداری می‌شود.**
-
-- GitHub: [github.com/roseshayan](https://github.com/roseshayan)
-- Repository: [github.com/roseshayan/SpeedyBot](https://github.com/roseshayan/SpeedyBot)
-- Telegram: [@SudoShayanNA](https://t.me/SudoShayanNA)
-- Email: `namayandeshayan@gmail.com`
-
-هنگام Fork یا انتشار نسخه مشتق‌شده، Attribution سازنده و Noticeهای Copyright/License را حفظ کن.
+Bug و Feature Request را می‌توانید در GitHub Issues ثبت کنید. قبل از ارسال Log، Secretها را حذف کنید.
 
 ---
 
-# لایسنس
+## سازنده و لایسنس
 
-پروژه تحت [MIT License](LICENSE) منتشر می‌شود.
+پروژه تحت **MIT License** منتشر شده است.
 
-Copyright © 2026 **SudoShayanNA**.
+سازنده و Maintainer:
 
-> **SpeedyBot · SudoShayanNA** — GitHub: `roseshayan/SpeedyBot` · Telegram: `@SudoShayanNA` · Email: `namayandeshayan@gmail.com`
+**SudoShayanNA**
+
+- Telegram: **@SudoShayanNA**
+- Email: **namayandeshayan@gmail.com**
+- Repository: **https://github.com/roseshayan/SpeedyBot**
+
+اگر پروژه را Fork یا بازنشر می‌کنید، نگه‌داشتن لینک سورس اصلی کمک می‌کند کاربران به مستندات، آپدیت‌های امنیتی و نسخه Maintained دسترسی داشته باشند.

@@ -235,6 +235,59 @@ def init_db():
         created_at INTEGER NOT NULL
     )''')
 
+    # v3.1: inbound routing, connection guides and lightweight CRM.
+    cursor.execute('''CREATE TABLE IF NOT EXISTS plan_inbounds (
+        plan_id INTEGER NOT NULL,
+        inbound_id INTEGER NOT NULL,
+        PRIMARY KEY (plan_id, inbound_id)
+    )''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS trial_inbounds (
+        inbound_id INTEGER PRIMARY KEY
+    )''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS guide_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        platform TEXT NOT NULL,
+        media_type TEXT NOT NULL,
+        body TEXT,
+        file_id TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        sort_order INTEGER NOT NULL DEFAULT 100,
+        created_at INTEGER NOT NULL
+    )''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS user_acquisition (
+        user_id INTEGER PRIMARY KEY,
+        source TEXT,
+        detail TEXT,
+        asked_at INTEGER,
+        answered_at INTEGER
+    )''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS trial_followups (
+        user_id INTEGER PRIMARY KEY,
+        due_at INTEGER NOT NULL,
+        sent_at INTEGER,
+        answered_at INTEGER,
+        reason TEXT,
+        detail TEXT,
+        created_at INTEGER NOT NULL
+    )''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS linked_services (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        linked_at INTEGER NOT NULL,
+        source TEXT NOT NULL DEFAULT 'CLAIM',
+        approved_by INTEGER
+    )''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS service_claims (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        email TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'PENDING',
+        created_at INTEGER NOT NULL,
+        resolved_at INTEGER,
+        resolved_by INTEGER
+    )''')
+
     # Seed catalog only once. Existing databases get the requested 3 monthly plans.
     now_seed = int(time.time())
     plan_count = cursor.execute("SELECT COUNT(*) FROM plans").fetchone()[0]
@@ -264,6 +317,13 @@ def init_db():
         'trial_expiry_warning_hours': '3',
         'xui_customers_group': 'Customers',
         'xui_trial_group': 'Trial',
+        'trial_enabled': '1',
+        'connection_guides_enabled': '1',
+        'acquisition_survey_enabled': '1',
+        'trial_followup_enabled': '1',
+        'trial_followup_delay_hours': '6',
+        'custom_service_names_enabled': '1',
+        'existing_service_link_enabled': '1',
         'phone_verification_required': '0',
         'membership_required': '0',
         'required_channel': '',
@@ -890,13 +950,250 @@ def get_referral_stats(user_id):
         conn.close()
 
 
+# --- V3.1 ROUTING / GUIDES / CRM HELPERS ---
+GUIDE_PLATFORMS = {
+    'android': 'Android',
+    'ios': 'iPhone / iOS',
+    'windows': 'Windows',
+    'macos': 'macOS',
+    'linux': 'Linux',
+    'tv': 'Android TV / TV Box',
+}
+
+ACQUISITION_SOURCES = {
+    'friend': 'معرفی دوست یا آشنا',
+    'telegram_search': 'جستجو در تلگرام',
+    'channel_ad': 'تبلیغ کانال یا گروه',
+    'instagram': 'اینستاگرام',
+    'web': 'گوگل / وب‌سایت',
+    'returning': 'قبلاً مشتری بودم',
+    'other': 'سایر',
+}
+
+TRIAL_FOLLOWUP_REASONS = {
+    'speed': 'سرعت یا کیفیت مناسب نبود',
+    'price': 'قیمت برایم مناسب نبود',
+    'setup': 'در راه‌اندازی مشکل داشتم',
+    'later': 'هنوز فرصت نکردم',
+    'noneed': 'فعلاً نیاز ندارم',
+    'buy': 'قصد خرید دارم',
+    'other': 'دلیل دیگر',
+}
+
+PROXY_LINK_SCHEMES = ('vless://', 'vmess://', 'trojan://', 'ss://', 'hysteria://', 'hysteria2://', 'hy2://')
+
+
+def trial_enabled():
+    return get_db_setting('trial_enabled', '1') == '1'
+
+
+def connection_guides_enabled():
+    return get_db_setting('connection_guides_enabled', '1') == '1'
+
+
+def acquisition_survey_enabled():
+    return get_db_setting('acquisition_survey_enabled', '1') == '1'
+
+
+def trial_followup_enabled():
+    return get_db_setting('trial_followup_enabled', '1') == '1'
+
+
+def custom_service_names_enabled():
+    return get_db_setting('custom_service_names_enabled', '1') == '1'
+
+
+def existing_service_link_enabled():
+    return get_db_setting('existing_service_link_enabled', '1') == '1'
+
+
+def _clean_proxy_links(links):
+    result = []
+    seen = set()
+    for link in links or []:
+        link = str(link or '').strip()
+        if not link or not link.lower().startswith(PROXY_LINK_SCHEMES):
+            continue
+        if link in seen:
+            continue
+        seen.add(link)
+        result.append(link)
+    return result
+
+
+def _configured_inbound_ids(scope, plan_id=None):
+    conn = _db_connect()
+    try:
+        if scope == 'trial':
+            rows = conn.execute('SELECT inbound_id FROM trial_inbounds ORDER BY inbound_id').fetchall()
+        else:
+            rows = conn.execute('SELECT inbound_id FROM plan_inbounds WHERE plan_id=? ORDER BY inbound_id', (int(plan_id),)).fetchall()
+        return [int(r['inbound_id']) for r in rows]
+    finally:
+        conn.close()
+
+
+def _set_inbound_toggle(scope, inbound_id, plan_id=None):
+    inbound_id = int(inbound_id)
+    conn = _db_connect()
+    try:
+        if scope == 'trial':
+            exists = conn.execute('SELECT 1 FROM trial_inbounds WHERE inbound_id=?', (inbound_id,)).fetchone()
+            if exists:
+                conn.execute('DELETE FROM trial_inbounds WHERE inbound_id=?', (inbound_id,)); selected = False
+            else:
+                conn.execute('INSERT OR IGNORE INTO trial_inbounds (inbound_id) VALUES (?)', (inbound_id,)); selected = True
+        else:
+            exists = conn.execute('SELECT 1 FROM plan_inbounds WHERE plan_id=? AND inbound_id=?', (int(plan_id), inbound_id)).fetchone()
+            if exists:
+                conn.execute('DELETE FROM plan_inbounds WHERE plan_id=? AND inbound_id=?', (int(plan_id), inbound_id)); selected = False
+            else:
+                conn.execute('INSERT OR IGNORE INTO plan_inbounds (plan_id,inbound_id) VALUES (?,?)', (int(plan_id), inbound_id)); selected = True
+        conn.commit(); return selected
+    finally:
+        conn.close()
+
+
+def _clear_inbound_selection(scope, plan_id=None):
+    conn = _db_connect()
+    if scope == 'trial':
+        conn.execute('DELETE FROM trial_inbounds')
+    else:
+        conn.execute('DELETE FROM plan_inbounds WHERE plan_id=?', (int(plan_id),))
+    conn.commit(); conn.close()
+
+
+def _selected_inbound_ids_for(scope, plan_id=None, headers=None, request_proxies=None):
+    headers = headers or _xui_headers()
+    request_proxies = request_proxies if request_proxies is not None else _xui_proxies()
+    active_ids = _get_active_inbound_ids(headers, request_proxies)
+    configured = _configured_inbound_ids(scope, plan_id)
+    if not configured:
+        return active_ids
+    active_set = set(active_ids)
+    selected = [i for i in configured if i in active_set]
+    if not selected:
+        label = 'تست رایگان' if scope == 'trial' else f'پلان #{plan_id}'
+        raise RuntimeError(f'برای {label} Inbound تنظیم شده ولی هیچ‌کدام فعال نیستند. از پنل ادمین Inboundها را اصلاح کنید.')
+    return selected
+
+
+def _sync_client_inbounds(email, desired_ids):
+    client = _get_client_data(email, _xui_headers(), _xui_proxies())
+    if not client:
+        raise RuntimeError('کلاینت برای همگام‌سازی Inboundها پیدا نشد.')
+    current = {int(x) for x in (client.get('inboundIds') or [])}
+    desired = {int(x) for x in (desired_ids or [])}
+    add_ids = sorted(desired - current)
+    remove_ids = sorted(current - desired)
+    encoded = quote(str(email), safe='')
+    if add_ids:
+        r = requests.post(_xui_url(f'panel/api/clients/{encoded}/attach'), json={'inboundIds': add_ids}, headers=_xui_headers(), proxies=_xui_proxies(), timeout=20, verify=not DEVELOPMENT_MODE)
+        if r.status_code != 200 or not _safe_json(r).get('success'):
+            raise RuntimeError(_xui_response_error(r, 'خطا در Attach کردن Inboundهای سرویس'))
+    if remove_ids:
+        r = requests.post(_xui_url(f'panel/api/clients/{encoded}/detach'), json={'inboundIds': remove_ids}, headers=_xui_headers(), proxies=_xui_proxies(), timeout=20, verify=not DEVELOPMENT_MODE)
+        if r.status_code != 200 or not _safe_json(r).get('success'):
+            raise RuntimeError(_xui_response_error(r, 'خطا در Detach کردن Inboundهای سرویس'))
+    return {'attached': add_ids, 'detached': remove_ids}
+
+
+def _guide_platform_markup(prefix='guide:platform'):
+    m = types.InlineKeyboardMarkup(row_width=2)
+    for key, title in GUIDE_PLATFORMS.items():
+        m.add(types.InlineKeyboardButton(title, callback_data=f'{prefix}:{key}'))
+    return m
+
+
+def _send_guide_menu(chat_id, text='📲 پلتفرم دستگاه خود را انتخاب کنید:'):
+    if not connection_guides_enabled():
+        bot.send_message(chat_id, '⛔️ راهنمای اتصال در حال حاضر غیرفعال است.'); return
+    bot.send_message(chat_id, text, reply_markup=_guide_platform_markup())
+
+
+def _send_platform_guide(chat_id, platform):
+    if platform not in GUIDE_PLATFORMS:
+        bot.send_message(chat_id, '❌ پلتفرم نامعتبر است.'); return
+    conn = _db_connect(); rows = conn.execute('SELECT * FROM guide_items WHERE platform=? AND active=1 ORDER BY sort_order,id', (platform,)).fetchall(); conn.close()
+    if not rows:
+        bot.send_message(chat_id, f'📲 برای **{GUIDE_PLATFORMS[platform]}** هنوز راهنمایی ثبت نشده است. با پشتیبانی تماس بگیرید.', parse_mode='Markdown'); return
+    bot.send_message(chat_id, f'📲 **راهنمای اتصال {GUIDE_PLATFORMS[platform]}**', parse_mode='Markdown')
+    for row in rows:
+        try:
+            if row['media_type'] == 'TEXT': bot.send_message(chat_id, row['body'] or '-', parse_mode='Markdown')
+            elif row['media_type'] == 'PHOTO': bot.send_photo(chat_id, row['file_id'], caption=row['body'] or None)
+            elif row['media_type'] == 'VIDEO': bot.send_video(chat_id, row['file_id'], caption=row['body'] or None)
+        except Exception:
+            continue
+
+
+def _send_guide_cta(user_id):
+    if not connection_guides_enabled(): return
+    m = types.InlineKeyboardMarkup(); m.add(types.InlineKeyboardButton('📲 راهنمای اضافه کردن کانفیگ', callback_data='guide:menu'))
+    try: bot.send_message(int(user_id), 'برای راه‌اندازی سرویس روی دستگاه خود، راهنمای پلتفرم را باز کنید:', reply_markup=m)
+    except Exception: pass
+
+
+def _maybe_ask_acquisition_source(user_id):
+    if not acquisition_survey_enabled(): return False
+    conn = _db_connect(); row = conn.execute('SELECT answered_at FROM user_acquisition WHERE user_id=?', (int(user_id),)).fetchone()
+    if row and row['answered_at']: conn.close(); return False
+    now = int(time.time())
+    conn.execute('INSERT OR IGNORE INTO user_acquisition (user_id,asked_at) VALUES (?,?)', (int(user_id), now))
+    conn.execute('UPDATE user_acquisition SET asked_at=COALESCE(asked_at,?) WHERE user_id=?', (now, int(user_id))); conn.commit(); conn.close()
+    m = types.InlineKeyboardMarkup(row_width=2)
+    for code, title in ACQUISITION_SOURCES.items(): m.add(types.InlineKeyboardButton(title, callback_data=f'survey:source:{code}'))
+    bot.send_message(int(user_id), '🙏 یک سؤال کوتاه برای بهتر شدن SpeedPing:\n**از چه طریقی با ما آشنا شدید؟**', parse_mode='Markdown', reply_markup=m)
+    return True
+
+
+def _schedule_trial_followup(user_id):
+    if not trial_followup_enabled(): return
+    try: delay = max(1.0, min(168.0, float(get_db_setting('trial_followup_delay_hours', '6'))))
+    except Exception: delay = 6.0
+    now = int(time.time()); due = now + int(delay * 3600); conn = _db_connect()
+    conn.execute("INSERT INTO trial_followups (user_id,due_at,created_at) VALUES (?,?,?) ON CONFLICT(user_id) DO UPDATE SET due_at=CASE WHEN sent_at IS NULL AND answered_at IS NULL THEN excluded.due_at ELSE due_at END", (int(user_id), due, now))
+    conn.commit(); conn.close()
+
+
+def process_due_trial_followups():
+    if not trial_followup_enabled(): return 0
+    now = int(time.time()); conn = _db_connect(); rows = conn.execute('SELECT * FROM trial_followups WHERE due_at<=? AND sent_at IS NULL AND answered_at IS NULL ORDER BY due_at LIMIT 50', (now,)).fetchall(); sent = 0
+    for row in rows:
+        uid = int(row['user_id']); bought = conn.execute("SELECT 1 FROM transactions WHERE user_id=? AND status='APPROVED' AND kind='NEW' LIMIT 1", (uid,)).fetchone()
+        if bought:
+            conn.execute("UPDATE trial_followups SET answered_at=?,reason='PURCHASED_BEFORE_FOLLOWUP' WHERE user_id=?", (now, uid)); continue
+        m = types.InlineKeyboardMarkup(row_width=2)
+        for code, title in TRIAL_FOLLOWUP_REASONS.items(): m.add(types.InlineKeyboardButton(title, callback_data=f'trialfb:{code}'))
+        try:
+            bot.send_message(uid, '👋 تست رایگان شما تمام شده و هنوز سرویس اصلی تهیه نکردید.\n\nاگر ممکنه بگید **مهم‌ترین دلیل خرید نکردن چی بوده؟** پاسخ شما کمک می‌کند سرویس را بهتر کنیم.', parse_mode='Markdown', reply_markup=m)
+            conn.execute('UPDATE trial_followups SET sent_at=? WHERE user_id=?', (now, uid)); sent += 1
+        except Exception: pass
+    conn.commit(); conn.close(); return sent
+
+
+def _validate_custom_service_name(value):
+    value = (value or '').strip()
+    if not re.fullmatch(r'[A-Za-z0-9._-]{3,40}', value):
+        return None, 'نام باید ۳ تا ۴۰ کاراکتر و فقط شامل حروف انگلیسی، عدد، نقطه، خط تیره یا _ باشد.'
+    conn = _db_connect(); exists_local = conn.execute('SELECT 1 FROM transactions WHERE service_email=? UNION SELECT 1 FROM linked_services WHERE email=?', (value, value)).fetchone(); conn.close()
+    if exists_local: return None, 'این نام قبلاً در ربات استفاده شده است.'
+    try:
+        if _get_client_data(value, _xui_headers(), _xui_proxies()): return None, 'این نام در پنل 3x-ui وجود دارد؛ نام دیگری انتخاب کنید.'
+    except Exception as e: return None, f'امکان بررسی نام در پنل وجود ندارد: {str(e)[:200]}'
+    return value, None
+
+
 # --- KEYBOARDS ---
 def main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row("🛍 مشاهده و خرید پلان‌ها", "👤 حساب کاربری")
-    markup.row("🤝 همکاری در فروش", "🎁 دریافت تست رایگان")
-    markup.row("🎟 کد هدیه / تخفیف", "📚 راهنما و سوالات")
-    markup.row("📞 پشتیبانی")
+    if trial_enabled():
+        markup.row("🤝 همکاری در فروش", "🎁 دریافت تست رایگان")
+    else:
+        markup.row("🤝 همکاری در فروش")
+    markup.row("📲 راهنمای اتصال", "📚 راهنما و سوالات")
+    markup.row("🎟 کد هدیه / تخفیف", "📞 پشتیبانی")
     return markup
 
 def back_menu():
@@ -919,7 +1216,10 @@ def admin_main_menu():
         types.InlineKeyboardButton("🔔 اعلان سرویس‌ها", callback_data="admin:notifications"),
         types.InlineKeyboardButton("📢 ارسال پیام همگانی", callback_data="admin:broadcast"),
         types.InlineKeyboardButton("💳 تنظیمات حساب واریز", callback_data="admin:bank_config"),
-        types.InlineKeyboardButton("📝 متن‌ها و راهنما", callback_data="admin:content"),
+        types.InlineKeyboardButton("📝 متن‌ها و FAQ", callback_data="admin:content"),
+        types.InlineKeyboardButton("🧪 تست و Inboundها", callback_data="admin:inbounds"),
+        types.InlineKeyboardButton("📲 راهنمای اتصال", callback_data="admin:guides"),
+        types.InlineKeyboardButton("📈 CRM و پیگیری", callback_data="admin:crm"),
         types.InlineKeyboardButton("👤 غیرفعال کردن کاربر", callback_data="admin:delete_user"),
         types.InlineKeyboardButton("🔌 حذف اشتراک از پنل", callback_data="admin:delete_sub")
     )
@@ -1023,6 +1323,25 @@ def process_user_code(message):
     ok, text = set_pending_discount(message.from_user.id, code)
     USER_STATES[message.chat.id] = None
     bot.send_message(message.chat.id, ("✅ " if ok else "❌ ") + text, reply_markup=main_menu())
+
+
+@bot.message_handler(func=lambda message: message.text == "📲 راهنمای اتصال")
+def show_connection_guides(message):
+    USER_STATES[message.chat.id] = None
+    _send_guide_menu(message.chat.id)
+
+
+@bot.callback_query_handler(func=lambda call: call.data == 'guide:menu')
+def guide_menu_callback(call):
+    bot.answer_callback_query(call.id)
+    _send_guide_menu(call.from_user.id)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('guide:platform:'))
+def guide_platform_callback(call):
+    platform = call.data.split(':', 2)[2]
+    bot.answer_callback_query(call.id)
+    _send_platform_guide(call.from_user.id, platform)
 
 
 @bot.message_handler(func=lambda message: message.text == "📚 راهنما و سوالات")
@@ -1129,6 +1448,9 @@ def show_wallet_history(call):
 def request_free_trial(message):
     USER_STATES[message.chat.id] = None
     user_id = message.from_user.id
+    if not trial_enabled():
+        bot.send_message(message.chat.id, "⛔️ دریافت تست رایگان در حال حاضر توسط مدیریت غیرفعال شده است.", reply_markup=main_menu())
+        return
     if not purchase_gate(user_id):
         return
     trial_email = f"speedping_trial_{user_id}"
@@ -1344,6 +1666,27 @@ def _start_wallet_checkout(call, plan, kind='NEW', target_service_email=None, ex
     finalize_service_transaction(result['tx_id'])
 
 
+def _ask_service_name_for_purchase(call, plan, payment_method):
+    if not custom_service_names_enabled():
+        if payment_method == 'CARD':
+            bot.answer_callback_query(call.id)
+            _start_card_checkout(call.message.chat.id, call.from_user.id, plan)
+        else:
+            _start_wallet_checkout(call, plan)
+        return
+    m = types.InlineKeyboardMarkup(row_width=1)
+    m.add(
+        types.InlineKeyboardButton("⚡ نام خودکار", callback_data=f"name:auto:{payment_method.lower()}:{plan['id']}"),
+        types.InlineKeyboardButton("✏️ انتخاب نام دلخواه", callback_data=f"name:custom:{payment_method.lower()}:{plan['id']}")
+    )
+    bot.answer_callback_query(call.id)
+    bot.send_message(
+        call.from_user.id,
+        "✉️ **نام سرویس**\n\nمی‌توانید نام خودکار امن بگیرید یا یک نام انگلیسی دلخواه انتخاب کنید. نام تکراری در پنل پذیرفته نمی‌شود.",
+        parse_mode="Markdown", reply_markup=m
+    )
+
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith('buy:'))
 def handle_buy_plan(call):
     plan_id = int(call.data.split(':')[1])
@@ -1352,8 +1695,7 @@ def handle_buy_plan(call):
         bot.answer_callback_query(call.id, "پلن نامعتبر یا غیرفعال است.", show_alert=True); return
     if not purchase_gate(call.from_user.id):
         bot.answer_callback_query(call.id, "ابتدا شرایط خرید را تکمیل کنید.", show_alert=True); return
-    bot.answer_callback_query(call.id)
-    _start_card_checkout(call.message.chat.id, call.from_user.id, plan)
+    _ask_service_name_for_purchase(call, plan, 'CARD')
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('walletbuy:'))
@@ -1364,7 +1706,59 @@ def handle_wallet_buy(call):
         bot.answer_callback_query(call.id, "پلن نامعتبر یا غیرفعال است.", show_alert=True); return
     if not purchase_gate(call.from_user.id):
         bot.answer_callback_query(call.id, "ابتدا شرایط خرید را تکمیل کنید.", show_alert=True); return
-    _start_wallet_checkout(call, plan)
+    _ask_service_name_for_purchase(call, plan, 'WALLET')
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('name:auto:'))
+def auto_name_purchase(call):
+    _, _, method, pid = call.data.split(':')
+    plan = get_plan(int(pid), include_inactive=False)
+    if not plan:
+        bot.answer_callback_query(call.id, 'پلن نامعتبر است.', show_alert=True); return
+    if method == 'card':
+        bot.answer_callback_query(call.id)
+        _start_card_checkout(call.from_user.id, call.from_user.id, plan)
+    else:
+        _start_wallet_checkout(call, plan)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('name:custom:'))
+def custom_name_purchase(call):
+    _, _, method, pid = call.data.split(':')
+    plan = get_plan(int(pid), include_inactive=False)
+    if not plan:
+        bot.answer_callback_query(call.id, 'پلن نامعتبر است.', show_alert=True); return
+    bot.answer_callback_query(call.id)
+    msg = bot.send_message(
+        call.from_user.id,
+        "✏️ نام دلخواه سرویس را بفرستید.\nمثال: `shayan-phone`\n\nفقط حروف انگلیسی، عدد، `.`, `_`, `-` و ۳ تا ۴۰ کاراکتر.",
+        parse_mode='Markdown', reply_markup=back_menu()
+    )
+    bot.register_next_step_handler(msg, process_custom_service_name, int(pid), method)
+
+
+def process_custom_service_name(message, plan_id, method):
+    if message.text == "🔙 بازگشت به منوی اصلی":
+        go_to_main_menu(message); return
+    plan = get_plan(int(plan_id), include_inactive=False)
+    if not plan:
+        bot.send_message(message.chat.id, '❌ پلن دیگر فعال نیست.', reply_markup=main_menu()); return
+    name, error = _validate_custom_service_name(message.text)
+    if error:
+        retry = bot.send_message(message.chat.id, f'❌ {error}\n\nنام دیگری بفرستید:', reply_markup=back_menu())
+        bot.register_next_step_handler(retry, process_custom_service_name, plan_id, method); return
+    if method == 'card':
+        _start_card_checkout(message.chat.id, message.from_user.id, plan, 'NEW', name)
+    else:
+        result, err = _create_checkout_transaction(message.from_user.id, plan, 'WALLET', 'NEW', name)
+        if not result:
+            bot.send_message(message.chat.id, f'❌ {err}', reply_markup=main_menu()); return
+        bot.send_message(
+            message.chat.id,
+            f"👛 مبلغ **{result['price']:,} تومان** از کیف پول کسر شد.\n⚡️ سرویس در حال ساخت است...",
+            parse_mode='Markdown', reply_markup=main_menu()
+        )
+        finalize_service_transaction(result['tx_id'])
 
 
 def process_receipt(message, tx_id):
@@ -1405,6 +1799,7 @@ def show_account(message):
         "SELECT email FROM trial_services WHERE user_id = ? AND status = 'ACTIVE'",
         (user_id,)
     ).fetchone()
+    linked_services = conn.execute("SELECT id,email FROM linked_services WHERE user_id=? ORDER BY id DESC", (user_id,)).fetchall()
     balance_row = conn.execute("SELECT balance FROM users WHERE id = ?", (user_id,)).fetchone()
     conn.close()
     balance = int(balance_row['balance'] if balance_row else 0)
@@ -1416,7 +1811,7 @@ def show_account(message):
     )
 
     markup = types.InlineKeyboardMarkup()
-    if approved_txs or active_trial:
+    if approved_txs or active_trial or linked_services:
         msg_text += "\n👇 برای مشاهده وضعیت زنده هر سرویس روی دکمه آن بزنید:"
         if active_trial:
             markup.add(types.InlineKeyboardButton(text="🎁 تست رایگان 1GB / 1 روز", callback_data="view:trial"))
@@ -1424,6 +1819,8 @@ def show_account(message):
             tx_id = int(tx['id'])
             label = (tx['plan_name_snapshot'] or f"سرویس #{tx_id}")[:45]
             markup.add(types.InlineKeyboardButton(text=f"📦 {label}", callback_data=f"view:status:{tx_id}"))
+        for item in linked_services:
+            markup.add(types.InlineKeyboardButton(text=f"🔗 {item['email'][:42]}", callback_data=f"view:linked:{int(item['id'])}"))
     else:
         msg_text += "\n❌ در حال حاضر سرویس فعالی ندارید."
 
@@ -1431,6 +1828,10 @@ def show_account(message):
         types.InlineKeyboardButton("🧾 تاریخچه خرید", callback_data="account:purchases"),
         types.InlineKeyboardButton("📜 تاریخچه کیف پول", callback_data="ref:wallet_history")
     )
+    if existing_service_link_enabled():
+        markup.row(types.InlineKeyboardButton("➕ افزودن سرویس خریداری‌شده قبلی", callback_data="account:link_existing"))
+    if connection_guides_enabled():
+        markup.row(types.InlineKeyboardButton("📲 راهنمای اتصال", callback_data="guide:menu"))
     bot.send_message(user_id, msg_text, parse_mode="Markdown", reply_markup=markup)
 
 
@@ -1476,6 +1877,63 @@ def handle_view_status(call):
     user_email = row['service_email'] or f"speedping_{user_id}_{tx_id}"
     bot.answer_callback_query(call.id, "در حال استعلام وضعیت زنده...")
     send_xui_status(user_id, user_email, tx_id)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('view:linked:'))
+def handle_view_linked_status(call):
+    linked_id = int(call.data.split(':')[2])
+    uid = int(call.from_user.id)
+    conn = _db_connect(); row = conn.execute('SELECT email FROM linked_services WHERE id=? AND user_id=?', (linked_id, uid)).fetchone(); conn.close()
+    if not row:
+        bot.answer_callback_query(call.id, 'سرویس پیدا نشد.', show_alert=True); return
+    bot.answer_callback_query(call.id, 'در حال استعلام...')
+    send_xui_status(uid, row['email'])
+
+
+@bot.callback_query_handler(func=lambda call: call.data == 'account:link_existing')
+def link_existing_service_start(call):
+    if not existing_service_link_enabled():
+        bot.answer_callback_query(call.id, 'این قابلیت غیرفعال است.', show_alert=True); return
+    bot.answer_callback_query(call.id)
+    msg = bot.send_message(
+        call.from_user.id,
+        '🔗 نام/Email کلاینتی که از قبل روی همین پنل 3x-ui دارید را ارسال کنید.\n\nبرای امنیت، اگر Telegram ID آن کلاینت با حساب شما یکی نباشد درخواست برای تأیید ادمین ارسال می‌شود.',
+        reply_markup=back_menu()
+    )
+    bot.register_next_step_handler(msg, process_existing_service_claim)
+
+
+def process_existing_service_claim(message):
+    if message.text == '🔙 بازگشت به منوی اصلی':
+        go_to_main_menu(message); return
+    email = (message.text or '').strip()
+    if not email or len(email) > 128 or re.search(r'\s', email):
+        bot.send_message(message.chat.id, '❌ نام کلاینت نامعتبر است.', reply_markup=main_menu()); return
+    try:
+        client = _get_client_data(email, _xui_headers(), _xui_proxies())
+    except Exception as e:
+        bot.send_message(message.chat.id, f'❌ پنل قابل استعلام نیست: {str(e)[:200]}', reply_markup=main_menu()); return
+    if not client:
+        bot.send_message(message.chat.id, '❌ چنین کلاینتی روی پنل پیدا نشد.', reply_markup=main_menu()); return
+    uid = int(message.from_user.id)
+    conn = _db_connect()
+    linked = conn.execute('SELECT user_id FROM linked_services WHERE email=?', (email,)).fetchone()
+    if linked:
+        conn.close(); bot.send_message(uid, 'ℹ️ این سرویس قبلاً به یک حساب ربات متصل شده است.', reply_markup=main_menu()); return
+    tg = str(client.get('tgId') or '0').strip()
+    if tg.isdigit() and int(tg) == uid:
+        conn.execute("INSERT INTO linked_services (user_id,email,linked_at,source,approved_by) VALUES (?,?,?,'SELF_TG',NULL)", (uid,email,int(time.time())))
+        conn.commit(); conn.close()
+        bot.send_message(uid, '✅ سرویس موجود با موفقیت به حساب شما اضافه شد.', reply_markup=main_menu()); return
+    existing = conn.execute("SELECT id FROM service_claims WHERE user_id=? AND email=? AND status='PENDING'", (uid,email)).fetchone()
+    if existing:
+        conn.close(); bot.send_message(uid, '⏳ درخواست قبلی شما هنوز در انتظار تأیید مدیریت است.', reply_markup=main_menu()); return
+    cur = conn.execute("INSERT INTO service_claims (user_id,email,status,created_at) VALUES (?,?,'PENDING',?)", (uid,email,int(time.time())))
+    claim_id = int(cur.lastrowid); conn.commit(); conn.close()
+    m = types.InlineKeyboardMarkup(row_width=2)
+    m.add(types.InlineKeyboardButton('✅ تأیید اتصال', callback_data=f'admin:claimapprove:{claim_id}'), types.InlineKeyboardButton('❌ رد', callback_data=f'admin:claimreject:{claim_id}'))
+    notify_admins(f'🔗 **درخواست اتصال سرویس موجود**\n\n👤 `{uid}`\n✉️ `{email}`\nTelegram ID پنل: `{tg or "0"}`', parse_mode='Markdown', reply_markup=m)
+    bot.send_message(uid, '✅ درخواست برای مدیریت ارسال شد. بعد از تأیید، سرویس در حساب شما نمایش داده می‌شود.', reply_markup=main_menu())
 
 
 @bot.callback_query_handler(func=lambda call: call.data == 'view:trial')
@@ -1552,6 +2010,8 @@ def send_xui_status(user_id, user_email, service_tx_id=None):
                     types.InlineKeyboardButton(text="📷 QR سابسکریپشن", callback_data=f"getqr:sub:{sub_id}")
                 )
             markup.row(types.InlineKeyboardButton(text="🔑 دریافت کانفیگ‌های مستقیم", callback_data=f"getlinks:dir:{user_email}"))
+            if connection_guides_enabled():
+                markup.row(types.InlineKeyboardButton(text="📲 راهنمای اضافه کردن کانفیگ", callback_data="guide:menu"))
             if service_tx_id:
                 markup.row(types.InlineKeyboardButton(text="♻️ تمدید سرویس", callback_data=f"service:renew:{service_tx_id}"))
                 if total_bytes > 0 and get_active_volume_packs():
@@ -1578,7 +2038,12 @@ def handle_account_get_links(call):
         bot.answer_callback_query(call.id, "در حال استخراج...")
         get_links_url = _xui_url(f"panel/api/clients/links/{quote(str(param), safe='')}")
         res = requests.get(get_links_url, headers=headers, proxies=request_proxies, timeout=15, verify=not DEVELOPMENT_MODE)
-        config_links = res.json().get("obj", []) if res.status_code == 200 and res.json().get("success") else []
+        config_links = _clean_proxy_links(_safe_json(res).get("obj", []) if res.status_code == 200 and _safe_json(res).get("success") else [])
+        if not config_links:
+            client = _get_client_data(param, headers, request_proxies)
+            sid = _get_client_subscription_id(param, headers, request_proxies, client)
+            if sid:
+                config_links = _get_sub_protocol_links(sid, headers, request_proxies)
         
         if config_links:
             msg_text = "🔑 **کانفیگ‌های اتصال مستقیم شما:**\n\n"
@@ -1746,6 +2211,54 @@ def forward_to_admin(message):
     conn.commit()
     conn.close()
     bot.send_message(message.chat.id, "⏳ پیام شما به پشتیبانی ارسال شد.")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('survey:source:'))
+def acquisition_source_callback(call):
+    code = call.data.split(':', 2)[2]
+    if code not in ACQUISITION_SOURCES:
+        return
+    uid = int(call.from_user.id)
+    bot.answer_callback_query(call.id, 'ممنون 🙏')
+    if code == 'other':
+        msg = bot.send_message(uid, 'اگر مایلید، خیلی کوتاه بنویسید از کجا با ما آشنا شدید:')
+        bot.register_next_step_handler(msg, process_acquisition_other)
+        return
+    conn = _db_connect(); conn.execute('UPDATE user_acquisition SET source=?,answered_at=? WHERE user_id=?', (code,int(time.time()),uid)); conn.commit(); conn.close()
+    bot.send_message(uid, '✅ ممنون که پاسخ دادید 🙏')
+
+
+def process_acquisition_other(message):
+    detail = (message.text or '').strip()[:500]
+    conn = _db_connect(); conn.execute("UPDATE user_acquisition SET source='other',detail=?,answered_at=? WHERE user_id=?", (detail,int(time.time()),int(message.from_user.id))); conn.commit(); conn.close()
+    bot.send_message(message.chat.id, '✅ ممنون از بازخورد شما 🙏', reply_markup=main_menu())
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('trialfb:'))
+def trial_followup_callback(call):
+    code = call.data.split(':', 1)[1]
+    if code not in TRIAL_FOLLOWUP_REASONS:
+        return
+    uid = int(call.from_user.id)
+    bot.answer_callback_query(call.id, 'ممنون 🙏')
+    if code == 'other':
+        msg = bot.send_message(uid, 'اگر مایلید دلیل را کوتاه بنویسید:')
+        bot.register_next_step_handler(msg, process_trial_followup_other)
+        return
+    conn = _db_connect(); conn.execute('UPDATE trial_followups SET reason=?,answered_at=? WHERE user_id=?', (code,int(time.time()),uid)); conn.commit(); conn.close()
+    if code == 'buy':
+        bot.send_message(uid, 'عالیه 🌟 از بخش **🛍 مشاهده و خرید پلان‌ها** پلن مناسب را انتخاب کنید.', parse_mode='Markdown', reply_markup=main_menu())
+    elif code in ('speed', 'setup'):
+        bot.send_message(uid, 'ممنون از بازخوردت. اگر دوست داشتی قبل از خرید، از بخش **📞 پشتیبانی** مشکل را بفرست تا بررسی کنیم.', parse_mode='Markdown', reply_markup=main_menu())
+    else:
+        bot.send_message(uid, '✅ ممنون که دلیل را گفتید. این بازخورد برای بهتر شدن سرویس ثبت شد.', reply_markup=main_menu())
+
+
+def process_trial_followup_other(message):
+    detail = (message.text or '').strip()[:500]
+    uid = int(message.from_user.id)
+    conn = _db_connect(); conn.execute("UPDATE trial_followups SET reason='other',detail=?,answered_at=? WHERE user_id=?", (detail,int(time.time()),uid)); conn.commit(); conn.close()
+    bot.send_message(uid, '✅ ممنون از بازخورد شما 🙏', reply_markup=main_menu())
+
 
 # --- 👑 POWERFUL ADMIN PANEL (/sudoadmin) ---
 def _run_xui_diagnostic():
@@ -1917,6 +2430,199 @@ def handle_admin_panel_callbacks(call):
         update_db_setting('service_username_mode','random')
         bot.answer_callback_query(call.id,"ذخیره شد ✅")
         bot.send_message(admin_chat,"✅ برای سرویس‌های جدید نام تصادفی و غیرقابل حدس ساخته می‌شود.")
+
+    elif action == "inbounds":
+        bot.answer_callback_query(call.id)
+        plans = get_active_plans()
+        m = types.InlineKeyboardMarkup(row_width=1)
+        m.add(types.InlineKeyboardButton(f"🎁 تست رایگان: {'🟢 فعال' if trial_enabled() else '🔴 غیرفعال'}", callback_data="admin:trial_toggle"))
+        m.add(types.InlineKeyboardButton("🔀 Inboundهای تست رایگان", callback_data="admin:inboundscope:trial:0"))
+        for plan in plans:
+            m.add(types.InlineKeyboardButton(f"📦 Inboundهای پلان #{plan['id']} — {plan['name'][:28]}", callback_data=f"admin:inboundscope:plan:{plan['id']}"))
+        bot.send_message(admin_chat, "🧪 **تست رایگان و مسیریابی Inbound**\n\nاگر برای یک بخش هیچ Inboundی انتخاب نشده باشد، برای سازگاری با نسخه‌های قبلی از همه Inboundهای فعال استفاده می‌شود.", parse_mode="Markdown", reply_markup=m)
+
+    elif action == "trial_toggle":
+        new = '0' if trial_enabled() else '1'
+        update_db_setting('trial_enabled', new)
+        bot.answer_callback_query(call.id, 'تغییر کرد ✅')
+        bot.send_message(admin_chat, f"🎁 تست رایگان {'فعال شد 🟢' if new == '1' else 'غیرفعال شد 🔴'}")
+
+    elif action == "inboundscope":
+        parts = call.data.split(':')
+        scope = parts[2]
+        pid = int(parts[3] or 0)
+        bot.answer_callback_query(call.id)
+        try:
+            active = _get_active_inbound_details(_xui_headers(), _xui_proxies())
+            configured = set(_configured_inbound_ids(scope, pid if scope == 'plan' else None))
+            title = 'تست رایگان' if scope == 'trial' else f'پلان #{pid}'
+            m = types.InlineKeyboardMarkup(row_width=1)
+            for ib in active:
+                iid = int(ib['id'])
+                mark = '✅' if iid in configured else '⬜'
+                m.add(types.InlineKeyboardButton(
+                    f"{mark} #{iid} | {ib.get('remark','-')[:25]} | {ib.get('protocol','-')}:{ib.get('port','-')}",
+                    callback_data=f"admin:inbtoggle:{scope}:{pid}:{iid}"
+                ))
+            m.add(types.InlineKeyboardButton("♻️ بازنشانی: همه Inboundهای فعال", callback_data=f"admin:inbreset:{scope}:{pid}"))
+            mode = 'همه فعال (پیش‌فرض)' if not configured else f'{len(configured)} Inbound انتخاب‌شده'
+            bot.send_message(admin_chat, f"🔀 **Inboundهای {title}**\nحالت فعلی: **{mode}**\n\nروی هر Inbound بزنید تا انتخاب/لغو شود.", parse_mode='Markdown', reply_markup=m)
+        except Exception as e:
+            bot.send_message(admin_chat, f"❌ دریافت Inboundها خطا داد: `{str(e)[:500]}`", parse_mode='Markdown')
+
+    elif action == "inbtoggle":
+        parts = call.data.split(':')
+        scope = parts[2]; pid = int(parts[3]); iid = int(parts[4])
+        selected = _set_inbound_toggle(scope, iid, pid if scope == 'plan' else None)
+        bot.answer_callback_query(call.id, 'انتخاب شد ✅' if selected else 'حذف شد')
+
+    elif action == "inbreset":
+        parts = call.data.split(':')
+        scope = parts[2]; pid = int(parts[3])
+        _clear_inbound_selection(scope, pid if scope == 'plan' else None)
+        bot.answer_callback_query(call.id, 'روی همه Inboundهای فعال تنظیم شد ✅', show_alert=True)
+
+    elif action == "guides":
+        bot.answer_callback_query(call.id)
+        conn = _db_connect()
+        counts = {r['platform']: int(r['c']) for r in conn.execute("SELECT platform,COUNT(*) c FROM guide_items WHERE active=1 GROUP BY platform").fetchall()}
+        conn.close()
+        m = types.InlineKeyboardMarkup(row_width=2)
+        for key, title in GUIDE_PLATFORMS.items():
+            m.add(types.InlineKeyboardButton(f"{title} ({counts.get(key,0)})", callback_data=f"admin:guideplatform:{key}"))
+        m.add(types.InlineKeyboardButton(f"⏯ کل راهنما: {'🟢' if connection_guides_enabled() else '🔴'}", callback_data='admin:guides_toggle'))
+        bot.send_message(admin_chat, '📲 **مدیریت راهنمای اتصال**\n\nبرای هر پلتفرم می‌توانید چند متن، عکس و ویدئو به ترتیب ثبت کنید.', parse_mode='Markdown', reply_markup=m)
+
+    elif action == "guides_toggle":
+        new = '0' if connection_guides_enabled() else '1'
+        update_db_setting('connection_guides_enabled', new)
+        bot.answer_callback_query(call.id, 'تغییر کرد ✅')
+
+    elif action == "guideplatform":
+        platform = call.data.split(':')[2]
+        if platform not in GUIDE_PLATFORMS:
+            return
+        conn = _db_connect()
+        rows = conn.execute('SELECT id,media_type,body FROM guide_items WHERE platform=? AND active=1 ORDER BY sort_order,id', (platform,)).fetchall()
+        conn.close()
+        lines = [f"📲 **{GUIDE_PLATFORMS[platform]}** — {len(rows)} آیتم"]
+        for r in rows[:20]:
+            lines.append(f"• `#{r['id']}` {r['media_type']} — {(r['body'] or '')[:40]}")
+        m = types.InlineKeyboardMarkup(row_width=2)
+        m.add(
+            types.InlineKeyboardButton('➕ متن', callback_data=f'admin:guideadd:{platform}:TEXT'),
+            types.InlineKeyboardButton('➕ عکس', callback_data=f'admin:guideadd:{platform}:PHOTO'),
+            types.InlineKeyboardButton('➕ ویدئو', callback_data=f'admin:guideadd:{platform}:VIDEO'),
+            types.InlineKeyboardButton('🗑 حذف آیتم', callback_data=f'admin:guidedeleteask:{platform}'),
+            types.InlineKeyboardButton('🔢 تغییر ترتیب', callback_data=f'admin:guideorderask:{platform}'),
+            types.InlineKeyboardButton('👁 پیش‌نمایش', callback_data=f'admin:guidepreview:{platform}')
+        )
+        bot.answer_callback_query(call.id)
+        bot.send_message(admin_chat, '\n'.join(lines), parse_mode='Markdown', reply_markup=m)
+
+    elif action == "guideadd":
+        _, _, platform, media_type = call.data.split(':')
+        prompt = {'TEXT': 'متن راهنما را بفرستید. Markdown مجاز است.', 'PHOTO': 'عکس را ارسال کنید؛ Caption اختیاری است.', 'VIDEO': 'ویدئو را ارسال کنید؛ Caption اختیاری است.'}[media_type]
+        msg = bot.send_message(admin_chat, prompt)
+        bot.register_next_step_handler(msg, process_admin_guide_item, platform, media_type)
+        bot.answer_callback_query(call.id)
+
+    elif action == "guidedeleteask":
+        platform = call.data.split(':')[2]
+        msg = bot.send_message(admin_chat, '🗑 ID آیتمی که باید حذف شود را بفرستید. مثال: `12`', parse_mode='Markdown')
+        bot.register_next_step_handler(msg, process_admin_guide_delete, platform)
+        bot.answer_callback_query(call.id)
+
+    elif action == "guideorderask":
+        platform = call.data.split(':')[2]
+        msg = bot.send_message(admin_chat, '🔢 `ID | ترتیب جدید` را بفرستید. مثال: `12 | 10`\nعدد کمتر زودتر نمایش داده می‌شود.', parse_mode='Markdown')
+        bot.register_next_step_handler(msg, process_admin_guide_order, platform)
+        bot.answer_callback_query(call.id)
+
+    elif action == "guidepreview":
+        platform = call.data.split(':')[2]
+        bot.answer_callback_query(call.id, 'پیش‌نمایش ارسال شد ✅')
+        _send_platform_guide(admin_chat, platform)
+
+    elif action == "crm":
+        conn = _db_connect()
+        sources = conn.execute('SELECT source,COUNT(*) c FROM user_acquisition WHERE answered_at IS NOT NULL GROUP BY source ORDER BY c DESC').fetchall()
+        follow = conn.execute("SELECT reason,COUNT(*) c FROM trial_followups WHERE answered_at IS NOT NULL AND reason IS NOT NULL GROUP BY reason ORDER BY c DESC").fetchall()
+        survey_asked = int(conn.execute('SELECT COUNT(*) c FROM user_acquisition WHERE asked_at IS NOT NULL').fetchone()['c'])
+        survey_answered = int(conn.execute('SELECT COUNT(*) c FROM user_acquisition WHERE answered_at IS NOT NULL').fetchone()['c'])
+        follow_scheduled = int(conn.execute('SELECT COUNT(*) c FROM trial_followups').fetchone()['c'])
+        follow_sent = int(conn.execute('SELECT COUNT(*) c FROM trial_followups WHERE sent_at IS NOT NULL').fetchone()['c'])
+        follow_answered = int(conn.execute("SELECT COUNT(*) c FROM trial_followups WHERE answered_at IS NOT NULL AND reason!='PURCHASED_BEFORE_FOLLOWUP'").fetchone()['c'])
+        converted_before = int(conn.execute("SELECT COUNT(*) c FROM trial_followups WHERE reason='PURCHASED_BEFORE_FOLLOWUP'").fetchone()['c'])
+        pending_claims = int(conn.execute("SELECT COUNT(*) c FROM service_claims WHERE status='PENDING'").fetchone()['c'])
+        linked_count = int(conn.execute('SELECT COUNT(*) c FROM linked_services').fetchone()['c'])
+        conn.close()
+        survey_rate = (survey_answered / survey_asked * 100.0) if survey_asked else 0.0
+        lines = [
+            '📈 **CRM و پیگیری فروش**', '',
+            f"منبع آشنایی: {'🟢' if acquisition_survey_enabled() else '🔴'} | پاسخ: **{survey_answered}/{survey_asked} ({survey_rate:.0f}٪)**",
+            f"پیگیری بعد از تست: {'🟢' if trial_followup_enabled() else '🔴'} | تأخیر: **{get_db_setting('trial_followup_delay_hours','6')} ساعت**",
+            f"Follow-up زمان‌بندی‌شده: **{follow_scheduled}** | ارسال‌شده: **{follow_sent}** | پاسخ: **{follow_answered}**",
+            f"خرید قبل از Follow-up: **{converted_before}**",
+            f"نام دلخواه سرویس: {'🟢' if custom_service_names_enabled() else '🔴'}",
+            f"اتصال سرویس قدیمی: {'🟢' if existing_service_link_enabled() else '🔴'} | متصل: **{linked_count}** | در انتظار تأیید: **{pending_claims}**"
+        ]
+        if sources:
+            lines.append('\n**منابع آشنایی:**')
+            lines += [f"• {ACQUISITION_SOURCES.get(r['source'], r['source'])}: **{r['c']}**" for r in sources]
+        if follow:
+            lines.append('\n**دلایل نخریدن بعد تست:**')
+            lines += [f"• {TRIAL_FOLLOWUP_REASONS.get(r['reason'], r['reason'])}: **{r['c']}**" for r in follow if r['reason'] != 'PURCHASED_BEFORE_FOLLOWUP']
+        m = types.InlineKeyboardMarkup(row_width=2)
+        m.add(
+            types.InlineKeyboardButton('⏯ منبع آشنایی', callback_data='admin:survey_toggle'),
+            types.InlineKeyboardButton('⏯ Follow-up تست', callback_data='admin:followup_toggle'),
+            types.InlineKeyboardButton('⏱ زمان Follow-up', callback_data='admin:followup_delay'),
+            types.InlineKeyboardButton('⏯ نام دلخواه', callback_data='admin:customname_toggle'),
+            types.InlineKeyboardButton('⏯ اتصال سرویس قدیمی', callback_data='admin:existinglink_toggle')
+        )
+        bot.answer_callback_query(call.id)
+        bot.send_message(admin_chat, '\n'.join(lines), parse_mode='Markdown', reply_markup=m)
+
+    elif action in ('survey_toggle', 'followup_toggle', 'customname_toggle', 'existinglink_toggle'):
+        mapping = {
+            'survey_toggle': 'acquisition_survey_enabled',
+            'followup_toggle': 'trial_followup_enabled',
+            'customname_toggle': 'custom_service_names_enabled',
+            'existinglink_toggle': 'existing_service_link_enabled'
+        }
+        key = mapping[action]
+        new = '0' if get_db_setting(key, '1') == '1' else '1'
+        update_db_setting(key, new)
+        bot.answer_callback_query(call.id, 'تغییر کرد ✅')
+
+    elif action == "followup_delay":
+        msg = bot.send_message(admin_chat, '⏱ چند ساعت بعد از اتمام تست پیام پیگیری ارسال شود؟ عدد 1 تا 168. مثال: `6`', parse_mode='Markdown')
+        bot.register_next_step_handler(msg, process_followup_delay)
+        bot.answer_callback_query(call.id)
+
+    elif action in ('claimapprove', 'claimreject'):
+        claim_id = int(call.data.split(':')[2])
+        conn = _db_connect()
+        claim = conn.execute("SELECT * FROM service_claims WHERE id=? AND status='PENDING'", (claim_id,)).fetchone()
+        if not claim:
+            conn.close(); bot.answer_callback_query(call.id, 'درخواست قبلاً بررسی شده.', show_alert=True); return
+        uid = int(claim['user_id']); email = claim['email']; now = int(time.time())
+        if action == 'claimapprove':
+            try:
+                conn.execute("INSERT INTO linked_services (user_id,email,linked_at,source,approved_by) VALUES (?,?,?,'ADMIN',?)", (uid,email,now,int(call.from_user.id)))
+                conn.execute("UPDATE service_claims SET status='APPROVED',resolved_at=?,resolved_by=? WHERE id=?", (now,int(call.from_user.id),claim_id))
+                conn.commit()
+                bot.send_message(uid, f'✅ سرویس `{email}` به حساب شما متصل شد.', parse_mode='Markdown', reply_markup=main_menu())
+                bot.answer_callback_query(call.id, 'تأیید شد ✅')
+            except sqlite3.IntegrityError:
+                conn.rollback(); bot.answer_callback_query(call.id, 'این سرویس قبلاً متصل شده است.', show_alert=True)
+        else:
+            conn.execute("UPDATE service_claims SET status='REJECTED',resolved_at=?,resolved_by=? WHERE id=?", (now,int(call.from_user.id),claim_id))
+            conn.commit()
+            bot.send_message(uid, f'❌ درخواست اتصال سرویس `{email}` توسط مدیریت رد شد.', parse_mode='Markdown')
+            bot.answer_callback_query(call.id, 'رد شد')
+        conn.close()
 
     elif action == "groups":
         bot.answer_callback_query(call.id, "در حال استعلام Groups پنل...")
@@ -2443,6 +3149,78 @@ def process_admin_content(message, key):
     update_db_setting(key,text); _admin_reply(message,"✅ متن ذخیره شد.")
 
 
+def process_admin_guide_item(message, platform, media_type):
+    if not is_admin(message.from_user.id) or platform not in GUIDE_PLATFORMS:
+        return
+    body = None
+    file_id = None
+    if media_type == 'TEXT':
+        body = (message.text or '').strip()
+        if not body:
+            _admin_reply(message, '❌ متن خالی است.'); return
+    elif media_type == 'PHOTO':
+        if not message.photo:
+            _admin_reply(message, '❌ باید عکس ارسال کنید.'); return
+        file_id = message.photo[-1].file_id
+        body = (message.caption or '').strip() or None
+    elif media_type == 'VIDEO':
+        if not message.video:
+            _admin_reply(message, '❌ باید ویدئو ارسال کنید.'); return
+        file_id = message.video.file_id
+        body = (message.caption or '').strip() or None
+    else:
+        return
+    conn = _db_connect()
+    order = int(conn.execute('SELECT COALESCE(MAX(sort_order),0)+10 n FROM guide_items WHERE platform=?', (platform,)).fetchone()['n'])
+    cur = conn.execute('INSERT INTO guide_items (platform,media_type,body,file_id,active,sort_order,created_at) VALUES (?,?,?,?,1,?,?)', (platform,media_type,body,file_id,order,int(time.time())))
+    conn.commit(); iid = cur.lastrowid; conn.close()
+    _admin_reply(message, f'✅ آیتم راهنما `#{iid}` برای {GUIDE_PLATFORMS[platform]} ذخیره شد.', parse_mode='Markdown')
+
+
+def process_admin_guide_delete(message, platform):
+    try:
+        iid = int((message.text or '').strip())
+        conn = _db_connect(); row = conn.execute('SELECT id FROM guide_items WHERE id=? AND platform=?', (iid,platform)).fetchone()
+        if not row:
+            conn.close(); _admin_reply(message, '❌ آیتم پیدا نشد.'); return
+        conn.execute('DELETE FROM guide_items WHERE id=?', (iid,)); conn.commit(); conn.close()
+        _admin_reply(message, f'✅ آیتم `#{iid}` حذف شد.', parse_mode='Markdown')
+    except Exception:
+        _admin_reply(message, '❌ ID نامعتبر است.')
+
+
+
+def process_admin_guide_order(message, platform):
+    if not is_admin(message.from_user.id):
+        return
+    try:
+        parts = [x.strip() for x in (message.text or '').split('|')]
+        if len(parts) != 2:
+            raise ValueError
+        item_id, sort_order = int(parts[0]), int(parts[1])
+        if sort_order < -100000 or sort_order > 100000:
+            raise ValueError
+        conn = _db_connect()
+        cur = conn.execute('UPDATE guide_items SET sort_order=? WHERE id=? AND platform=?', (sort_order, item_id, platform))
+        conn.commit(); conn.close()
+        if not cur.rowcount:
+            bot.send_message(message.chat.id, '❌ چنین آیتمی برای این پلتفرم پیدا نشد.')
+        else:
+            bot.send_message(message.chat.id, f'✅ ترتیب آیتم #{item_id} روی {sort_order} تنظیم شد.')
+    except Exception:
+        bot.send_message(message.chat.id, '❌ فرمت نامعتبر است. مثال: `12 | 10`', parse_mode='Markdown')
+
+def process_followup_delay(message):
+    try:
+        value = float((message.text or '').strip())
+        if value < 1 or value > 168:
+            raise ValueError
+        update_db_setting('trial_followup_delay_hours', f'{value:g}')
+        _admin_reply(message, f'✅ زمان پیگیری روی **{value:g} ساعت** تنظیم شد.', parse_mode='Markdown')
+    except Exception:
+        _admin_reply(message, '❌ عدد باید بین 1 و 168 ساعت باشد.')
+
+
 @bot.message_handler(commands=['groupsdiag'])
 def groups_diag_command(message):
     if not is_admin(message.from_user.id): return
@@ -2682,6 +3460,15 @@ def _safe_json(response):
         return {}
 
 
+def _get_active_inbound_details(headers, request_proxies):
+    url = _xui_url("panel/api/inbounds/list")
+    response = requests.get(url, headers=headers, proxies=request_proxies, timeout=15, verify=not DEVELOPMENT_MODE)
+    data = _safe_json(response)
+    if response.status_code != 200 or not data.get('success'):
+        raise RuntimeError(_xui_response_error(response, "خطا در دریافت Inboundها از پنل"))
+    return [ib for ib in (data.get('obj') or []) if ib.get('enable', True) and ib.get('id') is not None]
+
+
 def _get_active_inbound_ids(headers, request_proxies):
     get_inbounds_url = _xui_url("panel/api/inbounds/list")
     response = requests.get(
@@ -2728,8 +3515,26 @@ def _get_client_links(user_email, headers, request_proxies):
     )
     data = _safe_json(response)
     if response.status_code == 200 and data.get("success"):
-        return data.get("obj", []) or []
+        return _clean_proxy_links(data.get("obj", []) or [])
     return []
+
+
+def _get_sub_protocol_links(sub_id, headers, request_proxies):
+    if not sub_id:
+        return []
+    url = _xui_url(f"panel/api/clients/subLinks/{quote(str(sub_id), safe='')}")
+    response = requests.get(url, headers=headers, proxies=request_proxies, timeout=15, verify=not DEVELOPMENT_MODE)
+    data = _safe_json(response)
+    if response.status_code == 200 and data.get('success'):
+        return _clean_proxy_links(data.get('obj') or [])
+    return []
+
+
+def _get_delivery_links(user_email, sub_id, headers, request_proxies):
+    links = _get_client_links(user_email, headers, request_proxies)
+    if not links and sub_id:
+        links = _get_sub_protocol_links(sub_id, headers, request_proxies)
+    return _clean_proxy_links(links)
 
 
 def _extract_subscription_id(client_data, config_links=None):
@@ -2874,7 +3679,7 @@ def _update_exported_client(email, changes):
     return True
 
 
-def renew_xui_service(user_id, user_email, days, volume_gb, ip_limit):
+def renew_xui_service(user_id, user_email, days, volume_gb, ip_limit, plan_id=None):
     client, _ = _get_exported_client(user_email)
     if not client:
         raise RuntimeError("سرویس برای تمدید در پنل پیدا نشد.")
@@ -2897,6 +3702,9 @@ def renew_xui_service(user_id, user_email, days, volume_gb, ip_limit):
     )
     if reset.status_code != 200 or not _safe_json(reset).get('success'):
         raise RuntimeError(_xui_response_error(reset, "تمدید انجام شد ولی Reset Traffic خطا داد"))
+    if plan_id:
+        desired = _selected_inbound_ids_for('plan', int(plan_id), _xui_headers(), _xui_proxies())
+        _sync_client_inbounds(user_email, desired)
     try:
         _xui_assign_group(user_email, get_db_setting('xui_customers_group', 'Customers') or 'Customers')
     except Exception as e:
@@ -2949,11 +3757,12 @@ def generate_trial_xui_config(user_id, user_email):
     request_proxies = _xui_proxies()
 
     try:
+        # Inboundهای تست یک بار resolve می‌شوند و حتی در Retry هم روی Client موجود sync می‌شوند.
+        desired_inbound_ids = _selected_inbound_ids_for('trial', None, headers, request_proxies)
         # اگر تلاش قبلی پس از ساخت کلاینت قطع شده باشد، دوباره کلاینت تکراری نساز.
         client_data = _get_client_data(user_email, headers, request_proxies)
 
         if not client_data:
-            active_inbound_ids = _get_active_inbound_ids(headers, request_proxies)
             payload = {
                 "client": {
                     "email": user_email,
@@ -2963,7 +3772,7 @@ def generate_trial_xui_config(user_id, user_email):
                     "limitIp": 1,
                     "enable": True
                 },
-                "inboundIds": active_inbound_ids
+                "inboundIds": desired_inbound_ids
             }
 
             add_client_url = _xui_url("panel/api/clients/add")
@@ -2982,8 +3791,12 @@ def generate_trial_xui_config(user_id, user_email):
             time.sleep(1.0)
             client_data = _get_client_data(user_email, headers, request_proxies)
 
-        config_links = _get_client_links(user_email, headers, request_proxies)
+        if client_data:
+            _sync_client_inbounds(user_email, desired_inbound_ids)
+            client_data = _get_client_data(user_email, headers, request_proxies) or client_data
+
         sub_id = _get_client_subscription_id(user_email, headers, request_proxies, client_data)
+        config_links = _get_delivery_links(user_email, sub_id, headers, request_proxies)
 
         if not sub_id and not config_links:
             raise RuntimeError("اکانت ساخته شد اما پنل هیچ لینک سابسکریپشن یا کانفیگی برنگرداند.")
@@ -3036,6 +3849,7 @@ def generate_trial_xui_config(user_id, user_email):
         except Exception:
             pass
 
+    _send_guide_cta(user_id)
     try:
         notify_admins(f"🎁 تست رایگان برای کاربر `{user_id}` با موفقیت صادر شد.", parse_mode="Markdown")
     except Exception:
@@ -3067,9 +3881,9 @@ def provision_xui_service(user_id, plan_id, tx_id, user_email):
     headers = _xui_headers()
     request_proxies = _xui_proxies()
 
+    desired_inbound_ids = _selected_inbound_ids_for('plan', int(plan_id), headers, request_proxies)
     client_data = _get_client_data(user_email, headers, request_proxies)
     if not client_data:
-        active_inbound_ids = _get_active_inbound_ids(headers, request_proxies)
         payload = {
             "client": {
                 "email": user_email,
@@ -3079,7 +3893,7 @@ def provision_xui_service(user_id, plan_id, tx_id, user_email):
                 "limitIp": int(plan['ip_limit']),
                 "enable": True
             },
-            "inboundIds": active_inbound_ids
+            "inboundIds": desired_inbound_ids
         }
         response = requests.post(
             _xui_url("panel/api/clients/add"), json=payload, headers=headers,
@@ -3095,13 +3909,17 @@ def provision_xui_service(user_id, plan_id, tx_id, user_email):
             time.sleep(1.0)
             client_data = _get_client_data(user_email, headers, request_proxies)
 
+    if client_data:
+        _sync_client_inbounds(user_email, desired_inbound_ids)
+        client_data = _get_client_data(user_email, headers, request_proxies) or client_data
+
     try:
         _xui_assign_group(user_email, get_db_setting('xui_customers_group', 'Customers') or 'Customers')
     except Exception as group_error:
         notify_admins(f"⚠️ سرویس {user_email} ساخته شد اما Group Customers خطا داد: {str(group_error)[:350]}")
 
-    config_links = _get_client_links(user_email, headers, request_proxies)
     sub_id = _get_client_subscription_id(user_email, headers, request_proxies, client_data)
+    config_links = _get_delivery_links(user_email, sub_id, headers, request_proxies)
     if not sub_id and not config_links:
         raise RuntimeError("سرویس روی پنل وجود دارد اما هیچ لینک قابل تحویلی دریافت نشد.")
     return sub_id, config_links
@@ -3164,7 +3982,7 @@ def finalize_service_transaction(tx_id, admin_message_id=None, admin_chat_id=Non
         elif kind == 'RENEWAL':
             renew_xui_service(
                 user_id, user_email, int(tx['plan_days_snapshot'] or 0),
-                float(tx['plan_volume_gb_snapshot'] or 0), int(tx['plan_ip_limit_snapshot'] or 1)
+                float(tx['plan_volume_gb_snapshot'] or 0), int(tx['plan_ip_limit_snapshot'] or 1), int(tx['plan_id'] or 0)
             )
             client = _get_client_data(user_email, _xui_headers(), _xui_proxies())
             sub_id = _get_client_subscription_id(user_email, _xui_headers(), _xui_proxies(), client)
@@ -3210,8 +4028,11 @@ def finalize_service_transaction(tx_id, admin_message_id=None, admin_chat_id=Non
     _finish_discount(tx_id, applied=True)
     try:
         _send_transaction_success(tx_id, sub_id, config_links)
+        if kind == 'NEW':
+            _send_guide_cta(user_id)
+            _maybe_ask_acquisition_source(user_id)
     except Exception as e:
-        notify_admins(f"⚠️ تراکنش {tx_id} APPROVED شد اما پیام تحویل خطا داد: {str(e)[:500]}")
+        notify_admins(f"⚠️ تراکنش {tx_id} APPROVED شد اما پیام تحویل/پیگیری خطا داد: {str(e)[:500]}")
 
     reward = credit_referral_commission(tx_id)
     if reward:
@@ -3345,6 +4166,9 @@ def _tracked_service_map():
             result[str(row['service_email'])] = {
                 'user_id': int(row['user_id']), 'kind': 'PAID', 'tx_id': int(row['tx_id'])
             }
+        linked_rows = conn.execute("SELECT user_id,email FROM linked_services").fetchall()
+        for row in linked_rows:
+            result.setdefault(str(row['email']), {'user_id': int(row['user_id']), 'kind': 'LINKED', 'tx_id': None})
         trial_rows = conn.execute(
             "SELECT user_id, email FROM trial_services WHERE status = 'ACTIVE'"
         ).fetchall()
@@ -3429,6 +4253,34 @@ def _send_service_event(meta, email, event_types, client):
     bot.send_message(user_id, text, parse_mode="Markdown", reply_markup=main_menu())
 
 
+def _detect_expired_trials_for_followup():
+    """Detect expired trials for CRM even when user-facing service notifications are disabled."""
+    if not trial_followup_enabled():
+        return 0
+    conn = _db_connect()
+    rows = conn.execute("SELECT user_id,email FROM trial_services WHERE status='ACTIVE' AND email IS NOT NULL").fetchall()
+    conn.close()
+    if not rows:
+        return 0
+    clients = _fetch_xui_clients_for_monitor()
+    now_ms = int(time.time() * 1000)
+    expired = 0
+    for row in rows:
+        email = str(row['email'])
+        client = clients.get(email)
+        if not client:
+            continue
+        used, total, expiry_ms = _service_usage(client)
+        if (total > 0 and used >= total) or (expiry_ms > 0 and now_ms >= expiry_ms):
+            conn = _db_connect()
+            cur = conn.execute("UPDATE trial_services SET status='EXPIRED' WHERE user_id=? AND status='ACTIVE'", (int(row['user_id']),))
+            conn.commit(); conn.close()
+            if cur.rowcount:
+                _schedule_trial_followup(int(row['user_id']))
+                expired += 1
+    return expired
+
+
 def check_service_notifications(force=False):
     """Check tracked bot-issued clients and send one-time quota/expiry notifications."""
     if not service_notifications_enabled() and not force:
@@ -3489,7 +4341,9 @@ def check_service_notifications(force=False):
                     conn = _db_connect()
                     conn.execute("UPDATE trial_services SET status = 'EXPIRED' WHERE email = ? AND status = 'ACTIVE'", (email,))
                     conn.commit()
+                    row_uid = int(meta['user_id'])
                     conn.close()
+                    _schedule_trial_followup(row_uid)
             except Exception:
                 result['errors'] += 1
         return result
@@ -3526,7 +4380,10 @@ def _service_monitor_loop():
                 result = check_service_notifications()
                 consecutive_errors = 0 if result.get('errors', 0) == 0 else consecutive_errors + 1
             else:
+                # CRM پیگیری Trial مستقل از اعلان‌های مصرف/انقضاست.
+                _detect_expired_trials_for_followup()
                 consecutive_errors = 0
+            process_due_trial_followups()
         except Exception as e:
             consecutive_errors += 1
             # برای جلوگیری از اسپم، فقط هر 12 خطای متوالی یک هشدار به ادمین داده می‌شود.
