@@ -8,13 +8,13 @@ def apply():
     def purchase_gate(uid):
         b,reason=C.blocked(uid)
         if b: C.BOT.send_message(int(uid),"🚫 دسترسی خرید این حساب محدود شده است."+(f"\nدلیل: {reason}" if reason else "")+"\nبرای بررسی با پشتیبانی تماس بگیرید.",reply_markup=ui.main_menu()); return False
-        if C.mode()=="MAINTENANCE": C.BOT.send_message(int(uid),C.setting("maintenance_message"),reply_markup=ui.main_menu()); return False
+        if C.mode()=="MAINTENANCE": C.BOT.send_message(int(uid),C.setting("maintenance_message","🛠 سرویس موقتاً در حال نگهداری است."),reply_markup=ui.main_menu()); return False
         return C.ORIGINALS["purchase_gate"](uid)
     def checkout(uid,plan,payment_method,kind='NEW',target_service_email=None,extra_volume_gb=0):
         b,reason=C.blocked(uid)
         if b: return None,"دسترسی خرید این حساب محدود شده است."+(f" دلیل: {reason}" if reason else "")
-        if C.mode()=="MAINTENANCE": return None,C.setting("maintenance_message")
-        if C.mode()=="SALES_PAUSED": return None,"فروش و تمدید موقتاً توسط مدیریت متوقف شده است."
+        if C.mode()=="MAINTENANCE": return None,C.setting("maintenance_message","🛠 سرویس موقتاً در حال نگهداری است.")
+        if C.mode()=="SALES_PAUSED": return None,C.setting("sales_paused_message","🛒 فروش و تمدید موقتاً متوقف شده است.")
         return C.ORIGINALS["checkout"](uid,plan,payment_method,kind,target_service_email,extra_volume_gb)
     def trial_enabled(): return False if C.mode()=="MAINTENANCE" else bool(C.ORIGINALS["trial_enabled"]())
     def notify(text,parse_mode=None,reply_markup=None):
