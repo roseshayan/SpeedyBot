@@ -20,7 +20,9 @@ def init_db():
     else: cid=int(r[0])
     c.execute("UPDATE plans SET category_id=? WHERE category_id IS NULL",(cid,))
     defaults={
-      "operating_mode":"NORMAL","maintenance_message":"🛠 سرویس موقتاً در حال نگهداری است. حساب کاربری، راهنما و پشتیبانی همچنان در دسترس هستند.",
+      "operating_mode":"NORMAL",
+      "sales_paused_message":"🛒 فروش و تمدید موقتاً متوقف شده است. حساب کاربری، راهنما و پشتیبانی همچنان در دسترس هستند.",
+      "maintenance_message":"🛠 سرویس موقتاً در حال نگهداری است. حساب کاربری، راهنما و پشتیبانی همچنان در دسترس هستند.",
       "feedback_enabled":"1","plan_categories_enabled":"1","trial_overrides_enabled":"1","audit_enabled":"1","audit_chat_id":"",
       "ui_premium_emoji_enabled":"0","ui_style_buy":"success","ui_style_account":"primary","ui_style_trial":"success","ui_style_guide":"primary","ui_style_support":"primary","ui_style_admin":"primary",
       "ui_emoji_buy":"","ui_emoji_account":"","ui_emoji_trial":"","ui_emoji_guide":"","ui_emoji_support":"","ui_emoji_admin":"",
@@ -45,10 +47,11 @@ def audiences(code):
     rows=c.execute(sql).fetchall() if sql else []; c.close(); return [int(r[0]) for r in rows]
 
 def feedback_text():
+    from html import escape
     c=db(); total,avg=c.execute("SELECT COUNT(*),COALESCE(AVG(rating),0) FROM customer_feedback").fetchone(); dist={int(r[0]):int(r[1]) for r in c.execute("SELECT rating,COUNT(*) FROM customer_feedback GROUP BY rating")}; recent=c.execute("SELECT user_id,rating,comment FROM customer_feedback ORDER BY id DESC LIMIT 8").fetchall(); c.close()
     out=["⭐ <b>بازخورد مشتریان</b>","━━━━━━━━━━━━━━━━",f"📊 تعداد: <b>{int(total)}</b>",f"⭐ میانگین: <b>{float(avg):.2f}/5</b>",""]
     for n in range(5,0,-1): out.append(f"{'⭐'*n}  {dist.get(n,0)}")
     if recent:
         out += ["","🕘 <b>آخرین بازخوردها</b>"]
-        for r in recent: out.append(f"• <code>{r['user_id']}</code> — {r['rating']}/5"+(f" — {(r['comment'] or '')[:70]}" if r['comment'] else ""))
+        for r in recent: out.append(f"• <code>{r['user_id']}</code> — {r['rating']}/5"+(f" — {escape((r['comment'] or '')[:70])}" if r['comment'] else ""))
     return "\n".join(out)
