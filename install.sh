@@ -23,12 +23,11 @@ normalize_base_path(){ local v; v="$(trim "$1")"; [[ -z "$v" ]] && v="/"; [[ "$v
 normalize_sub_path(){ local v; v="$(trim "$1")"; [[ -z "$v" ]] && v="/sub/"; [[ "$v" != /* ]] && v="/$v"; [[ "$v" != */ ]] && v="$v/"; printf '%s' "$v"; }
 
 write_runner(){
-  local target="$APP_DIR/main.py"; [[ -f "$APP_DIR/app.py" ]] && target="$APP_DIR/app.py"
   cat > "$RUNNER_FILE" <<EOF
 #!/usr/bin/env bash
 set -Eeuo pipefail
 source "$ENV_FILE"
-exec "$APP_DIR/.venv/bin/python3" "$target"
+exec "$APP_DIR/.venv/bin/python3" "$APP_DIR/main.py"
 EOF
   chmod 700 "$RUNNER_FILE"
 }
@@ -36,6 +35,7 @@ EOF
 [[ "$EUID" -eq 0 ]] || fail "Run install.sh as root."
 command -v apt-get >/dev/null 2>&1 || fail "apt-get was not found. Ubuntu/Debian is required."
 [[ -f "$SOURCE_DIR/main.py" ]] || fail "main.py is missing next to install.sh."
+[[ -d "$SOURCE_DIR/speedybot" ]] || fail "speedybot application package is missing."
 
 printf '\n============================================================\n SpeedyBot installer\n Telegram sales + 3x-ui / Sanaei automation\n============================================================\n\n'
 BOT_TOKEN="$(secret "Telegram bot token")"; [[ "$BOT_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]{20,}$ ]] || fail "Telegram bot token format is invalid."
@@ -50,21 +50,34 @@ printf '\nConfiguration summary:\n  Admin ID: %s\n  API URL: %s\n  Base path: %s
 confirm "Continue installation" || { warn "Installation cancelled."; exit 0; }
 
 export DEBIAN_FRONTEND=noninteractive
-apt-get update; apt-get install -y python3 python3-pip python3-venv curl git ca-certificates
+apt-get update
+apt-get install -y python3 python3-pip python3-venv curl git ca-certificates rsync
 mkdir -p "$APP_DIR"
-SOURCE_FILES=(main.py app.py requirements.txt VERSION.txt README.md README_FA.md CHANGELOG.md MIGRATION_NOTES.md RELEASE_NOTES_v4.0.0.md .gitignore)
+
 if [[ "$SOURCE_DIR" != "$APP_DIR" ]]; then
-  for f in "${SOURCE_FILES[@]}"; do [[ -f "$SOURCE_DIR/$f" ]] && cp -a "$SOURCE_DIR/$f" "$APP_DIR/$f"; done
-  [[ ! -d "$SOURCE_DIR/speedybot_v4" ]] || { rm -rf "$APP_DIR/speedybot_v4"; cp -a "$SOURCE_DIR/speedybot_v4" "$APP_DIR/speedybot_v4"; }
-  [[ ! -d "$SOURCE_DIR/docs" ]] || { rm -rf "$APP_DIR/docs"; cp -a "$SOURCE_DIR/docs" "$APP_DIR/docs"; }
-else info "Source is already $APP_DIR; skipping self-copy."; fi
+  info "Installing the complete SpeedyBot repository..."
+  rsync -a --delete \
+    --exclude '.git/' \
+    --exclude '.env' \
+    --exclude '.venv/' \
+    --exclude 'speedping.db' \
+    --exclude 'speedping.db-wal' \
+    --exclude 'speedping.db-shm' \
+    --exclude 'backups/' \
+    --exclude 'run.sh' \
+    --exclude '.deployed_commit' \
+    "$SOURCE_DIR/" "$APP_DIR/"
+else
+  info "Source is already $APP_DIR; using the repository in place."
+fi
 cd "$APP_DIR"
 
 python3 -m venv .venv
 ./.venv/bin/python -m pip install --upgrade pip setuptools wheel >/dev/null
 if [[ -f requirements.txt ]]; then ./.venv/bin/python -m pip install -r requirements.txt; else ./.venv/bin/python -m pip install pyTelegramBotAPI requests 'qrcode[pil]'; fi
-./.venv/bin/python -m py_compile main.py; [[ ! -f app.py ]] || ./.venv/bin/python -m py_compile app.py; [[ ! -d speedybot_v4 ]] || ./.venv/bin/python -m py_compile speedybot_v4/*.py
-bash -n install.sh; [[ ! -f update.sh ]] || bash -n update.sh
+./.venv/bin/python -m py_compile main.py speedybot/*.py
+bash -n install.sh
+[[ ! -f update.sh ]] || bash -n update.sh
 
 cat > "$ENV_FILE" <<EOF
 export BOT_TOKEN=$(printf '%q' "$BOT_TOKEN")
@@ -93,12 +106,13 @@ if r.status_code==404: sys.exit(22)
 sys.exit(23)
 PY
 )"; CODE=$?; set -e
-[[ "$CODE" -eq 0 ]] || fail "3x-ui API preflight failed: $PREFLIGHT"; ok "3x-ui API preflight passed."
+[[ "$CODE" -eq 0 ]] || fail "3x-ui API preflight failed: $PREFLIGHT"
+ok "3x-ui API preflight passed."
 
 write_runner
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
-Description=SpeedPing Telegram Bot
+Description=SpeedyBot Telegram Bot
 After=network-online.target
 Wants=network-online.target
 [Service]
@@ -111,5 +125,14 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl daemon-reload; systemctl enable "$SERVICE_NAME"; systemctl restart "$SERVICE_NAME"; sleep 4
-if systemctl is-active --quiet "$SERVICE_NAME"; then ok "Installation completed successfully."; systemctl --no-pager --full status "$SERVICE_NAME" || true; else journalctl -u "$SERVICE_NAME" -n 80 --no-pager || true; fail "Service failed to start."; fi
+systemctl daemon-reload
+systemctl enable "$SERVICE_NAME"
+systemctl restart "$SERVICE_NAME"
+sleep 4
+if systemctl is-active --quiet "$SERVICE_NAME"; then
+  ok "Installation completed successfully."
+  systemctl --no-pager --full status "$SERVICE_NAME" || true
+else
+  journalctl -u "$SERVICE_NAME" -n 80 --no-pager || true
+  fail "Service failed to start."
+fi
