@@ -1,46 +1,288 @@
 # SpeedyBot v4.0.0
 
-<p align="center"><strong>Open-source Telegram sales, subscription and customer-management bot for 3x-ui / Sanaei</strong></p>
+<p align="center">
+  <strong>Open-source Telegram sales, subscription and CRM bot for 3x-ui / Sanaei</strong><br>
+  Automated provisioning • Free trials • Renewals • Wallet • Affiliate • Inbound routing • CRM • Connection guides • Control Center
+</p>
 
-<p align="center"><a href="README_FA.md">🇮🇷 راهنمای فارسی</a> · <a href="CHANGELOG.md">Changelog</a> · <a href="SECURITY.md">Security</a> · <a href="CONTRIBUTING.md">Contributing</a></p>
+<p align="center">
+  <a href="README_FA.md">🇮🇷 راهنمای فارسی</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="MIGRATION_NOTES.md">Migration Guide</a> ·
+  <a href="SECURITY.md">Security</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
 
 > **Author / Maintainer:** **SudoShayanNA**  
 > Telegram: **@SudoShayanNA** · Email: **namayandeshayan@gmail.com**  
 > Official repository: **https://github.com/roseshayan/SpeedyBot**
 
-SpeedyBot turns Telegram into a self-hosted storefront and control center for a modern **3x-ui / Sanaei** deployment. It provisions clients, sells and renews services, issues trials, manages wallets and referrals, routes plans to selected inbounds, follows up leads, and gives administrators an operational dashboard without requiring a separate web panel.
+SpeedyBot turns Telegram into a practical sales, self-service and operations layer for a **3x-ui / Sanaei** panel. It can create clients after payment approval, issue free trials, sell and renew plans, deliver subscription/direct links and QR codes, manage wallet/referral rewards, notify customers about service expiry, provide platform connection guides, and run most day-to-day administration from Telegram.
 
-## v4 highlights
+v4 adds a cleaner **Control Center**, operating modes, plan categories, user purchase restrictions, per-user trial overrides, customer feedback, targeted broadcasts, audit logging, read-only panel snapshots, and Telegram button styles / optional Custom Emoji support.
 
-- New modular runtime: stable v3 business core remains in `main.py`; v4 product features live in `speedybot_v4/` and are loaded by `app.py`.
-- Cleaner customer account, categorized plan storefront and reorganized admin Control Center.
-- Official Telegram button styles: `primary` (blue), `success` (green), `danger` (red), plus default style.
-- Optional Custom/Premium Emoji IDs on important buttons, with safe fallback and `/emojiid` helper.
-- Operating modes: **Normal**, **Sales Paused**, **Maintenance**.
-- User purchase blacklist/restriction with reason and audit trail.
-- Plan categories for country/use-case/product grouping.
-- Per-user trial override: traffic, days and IP limit.
-- 1–5 star customer feedback with comments and admin analytics.
-- Targeted broadcasts to all users, customers, trial leads, expired-trial leads, or users who never purchased.
-- SQLite audit events and optional Telegram audit channel.
-- Read-only emergency 3x-ui client snapshot export.
-- v3.1 features remain available: secure existing-service claims, custom client names, CRM acquisition survey, trial follow-up, connection guides, plan/trial inbound routing, groups, wallet, referral, cashback, discount/gift codes and notifications.
+The stable v3 business core remains in `main.py`. v4 boots through `app.py` and loads modules from `speedybot_v4/`. Runtime data is stored in SQLite and the production service is managed by `systemd` on Ubuntu.
+
+---
+
+## Table of contents
+
+- [Features](#features)
+- [What's new in v4](#whats-new-in-v4)
+- [Default catalog](#default-catalog)
+- [Requirements](#requirements)
+- [Before installation](#before-installation)
+- [Step-by-step installation](#step-by-step-installation)
+- [First-run checklist](#first-run-checklist)
+- [Admin Control Center](#admin-control-center)
+- [Operating modes](#operating-modes)
+- [Plan categories](#plan-categories)
+- [Free trials and inbound routing](#free-trials-and-inbound-routing)
+- [Per-user trial overrides](#per-user-trial-overrides)
+- [Connection guides](#connection-guides)
+- [CRM and trial follow-up](#crm-and-trial-follow-up)
+- [Existing services and custom names](#existing-services-and-custom-names)
+- [Payments, wallet and marketing](#payments-wallet-and-marketing)
+- [Renewals](#renewals)
+- [Groups](#groups)
+- [Customer feedback](#customer-feedback)
+- [Targeted broadcasts](#targeted-broadcasts)
+- [Audit log](#audit-log)
+- [Panel snapshot](#panel-snapshot)
+- [Button styles and Custom Emoji](#button-styles-and-custom-emoji)
+- [Notifications](#notifications)
+- [Diagnostics](#diagnostics)
+- [Updating](#updating)
+- [Migrating from v3.x to v4](#migrating-from-v3x-to-v4)
+- [Backups and rollback](#backups-and-rollback)
+- [Troubleshooting](#troubleshooting)
+- [Security](#security)
+- [Project layout](#project-layout)
+- [License and author](#license-and-author)
+
+---
+
+## Features
+
+### Automated sales and provisioning
+
+- Automatic 3x-ui client creation after payment approval.
+- Default free trial: **1 GB / 1 day / 1 IP**.
+- Dynamic SQLite-backed plans.
+- Per-plan IP limits.
+- Manual card-transfer receipt workflow with admin approval.
+- Wallet checkout.
+- Idempotent provisioning / safe retry behavior.
+- Subscription URL delivery.
+- Direct proxy-link delivery.
+- Subscription QR code.
+- Service renewal using the same client identity.
+- Optional extra-volume packs for metered plans.
+
+### Inbound routing
+
+Choose exact active inbounds for:
+
+- Free Trial
+- Plan #1
+- Plan #2
+- Any plan created later
+
+If no explicit selection exists, SpeedyBot falls back to **all active inbounds** for backward compatibility. Existing clients are re-synchronized during safe retries and renewal can move a service to the destination plan's configured inbounds.
+
+### Customer experience
+
+- User account.
+- Live service status.
+- Remaining traffic / expiry visibility.
+- Subscription and direct links.
+- QR.
+- Renewal.
+- Extra-volume purchase where applicable.
+- Purchase history.
+- Wallet history.
+- Gift and discount codes.
+- Referral / affiliate link.
+- Platform-specific connection guides.
+- Secure linking of previously purchased services.
+- Optional custom service name.
+- Customer rating / feedback.
+- Optional phone verification.
+- Optional required Telegram-channel membership.
+
+### Growth / CRM
+
+- One-level referral rewards.
+- Configurable cashback.
+- Percentage or fixed discount codes.
+- Gift wallet codes.
+- Acquisition-source survey after the first successful paid purchase.
+- Automated post-trial sales follow-up.
+- Structured reasons for not purchasing.
+- Targeted broadcasts by audience segment.
+- Customer satisfaction feedback.
+
+---
+
+## What's new in v4
+
+### New Control Center
+
+`/sudoadmin` is reorganized into clearer business and operations sections so common actions are easier to scan and less text-dense.
+
+### Operating modes
+
+- `NORMAL` — normal operation.
+- `SALES_PAUSED` — new purchases, renewals and volume add-ons are paused; account, guides and support stay available.
+- `MAINTENANCE` — sales and new trials are paused; account, guides and support stay available.
+
+### User restrictions / blacklist
+
+Admins can restrict a Telegram user from purchases/trials with a stored reason and later remove the restriction. Support access remains available.
+
+### Plan categories
+
+Organize plans into categories such as Gaming, Germany, Static IP, Business, etc.
+
+### Per-user trial override
+
+Before the user's first trial, admins can override trial GB, days and IP limit for a specific Telegram ID.
+
+### Customer feedback
+
+1–5 stars, optional comment, average rating and rating distribution.
+
+### Targeted broadcast
+
+Send to specific audiences instead of everyone.
+
+### Audit log
+
+Important v4 administrative actions are stored in SQLite and can optionally be mirrored to a private Telegram chat/channel.
+
+### Read-only panel snapshot
+
+Exports a JSON snapshot of clients from the panel for disaster-recovery investigation. Automatic destructive restore is intentionally not included.
+
+### Button styles / Custom Emoji
+
+SpeedyBot supports Telegram's official button styles such as `primary`, `success`, and `danger`. Telegram bots cannot select arbitrary HEX/RGB colors for buttons.
+
+Custom/Premium Emoji button icons are optional and fall back safely when Telegram does not allow them.
+
+---
+
+## Default catalog
+
+Fresh databases receive:
+
+| Plan | Duration | Traffic | IP limit | Default price |
+|---|---:|---:|---:|---:|
+| Unlimited - 1 user | 30 days | Unlimited | 1 | 250,000 Toman |
+| Unlimited - 2 users | 30 days | Unlimited | 2 | 300,000 Toman |
+| Unlimited - 3 users | 30 days | Unlimited | 3 | 350,000 Toman |
+
+These are seed defaults only. Update prices and plans from `/sudoadmin` before production sales.
+
+---
 
 ## Requirements
 
-Recommended:
+Recommended production environment:
 
-- Ubuntu 24.04 LTS
-- Python 3.12+
-- Current 3x-ui/Sanaei panel with `/panel/api/*`
+- Ubuntu **24.04 LTS**
+- Python 3.12
+- Current 3x-ui/Sanaei panel exposing `/panel/api/*`
 - 3x-ui Bearer API token
 - Telegram bot token from `@BotFather`
-- Numeric Telegram ID for the owner/admin
-- Working subscription server if subscription URLs are required
+- Numeric Telegram ID for the Owner
+- Working subscription service if subscription URLs are used
+- Outbound network access to Telegram and the panel
 
-SpeedyBot uses long polling; no Telegram webhook port is required.
+SpeedyBot uses long polling; Telegram does not require an inbound webhook port.
 
-## Fresh installation
+---
+
+## Before installation
+
+### 1. Create the Telegram bot
+
+In `@BotFather`:
+
+1. Send `/newbot`.
+2. Choose a display name.
+3. Choose a username ending in `bot`.
+4. Copy and securely store the token.
+
+Never put the token into a public Issue, screenshot, README or commit.
+
+### 2. Find the Owner Telegram ID
+
+Get the **numeric** Telegram user ID for the account that will own the bot. This becomes `ADMIN_ID`.
+
+A Telegram username is not the same as a numeric Telegram ID.
+
+### 3. Create a 3x-ui Bearer API token
+
+In the panel:
+
+```text
+Settings → Security → API Token
+```
+
+Create a token and save the **plaintext token value** when shown.
+
+The following are not the Bearer API token:
+
+- Token display name
+- Panel password
+- Hidden panel web path
+
+### 4. Understand API URL vs Base Path
+
+If your panel opens at:
+
+```text
+https://panel.example.com:2053/secret-panel/
+```
+
+enter:
+
+```text
+X-UI API base URL: https://panel.example.com:2053
+X-UI security base path: /secret-panel
+```
+
+If no hidden path is configured:
+
+```text
+X-UI security base path: /
+```
+
+Do not duplicate the hidden path inside the base URL field.
+
+### 5. Subscription settings
+
+If a real subscription URL looks like:
+
+```text
+https://sub.example.com:2096/sub/ABC123
+```
+
+installer values are:
+
+```text
+Subscription server base URL: https://sub.example.com:2096
+Subscription URI path: /sub/
+```
+
+Use your actual 3x-ui subscription path if it differs.
+
+---
+
+## Step-by-step installation
+
+Log in as root:
 
 ```bash
 apt update
@@ -55,56 +297,89 @@ chmod +x install.sh update.sh
 The installer asks for:
 
 1. Telegram Bot Token
-2. Owner/Admin Telegram numeric ID
-3. X-UI API base URL, for example `https://panel.example.com:2053`
-4. X-UI security base path, for example `/secret` or `/`
-5. Plaintext Bearer API Token from **Settings → Security → API Token**
+2. Telegram Admin numeric ID
+3. X-UI API base URL
+4. X-UI security base path
+5. Panel Bearer API Token
 6. Subscription server base URL
-7. Subscription URI path, usually `/sub/`
+7. Subscription URI path
 
-Before installing the service, the installer performs a read-only API preflight.
+Before installing the service, the installer performs a **read-only API preflight** to catch authentication/base-path mistakes.
 
-Runtime files:
+### Runtime files
 
 ```text
-/root/SpeedyBot/.env          secrets, chmod 600
-/root/SpeedyBot/speedping.db  SQLite data
-/root/SpeedyBot/run.sh        systemd runner
+/root/SpeedyBot/.env
+/root/SpeedyBot/.venv/
+/root/SpeedyBot/speedping.db
+/root/SpeedyBot/run.sh
+/root/SpeedyBot/backups/
+/etc/systemd/system/xui-bot.service
 ```
 
-Check the service:
+In v4, `run.sh` prefers `app.py` and falls back to `main.py` for older builds.
+
+### Service status
 
 ```bash
 systemctl status xui-bot.service --no-pager -l
+```
+
+### Live logs
+
+```bash
 journalctl -u xui-bot.service -f
 ```
 
-## Upgrade from v3.x
-
-Do not delete `.env` or `speedping.db`.
+### Last 150 log lines
 
 ```bash
-cd /root/SpeedyBot
-./update.sh --check
-./update.sh
+journalctl -u xui-bot.service -n 150 --no-pager
 ```
 
-The v4 updater:
+### Restart
 
-1. runs itself from a temporary copy;
-2. clones and validates the new source before downtime;
-3. installs dependencies before stopping the bot;
-4. backs up `.env`, SQLite DB/WAL/SHM, source and v4 modules;
-5. deploys the new files;
-6. switches the runner to `app.py` when available;
-7. restarts and health-checks systemd;
-8. restores the previous build if deployment fails.
+```bash
+systemctl restart xui-bot.service
+```
 
-v4 database migrations are additive. Existing sales, users, wallet history, trials and service records are preserved.
+---
+
+## First-run checklist
+
+From the Owner account:
+
+```text
+/start
+/sudoadmin
+```
+
+Before accepting real customers:
+
+1. Replace example payment/card data.
+2. Verify plan prices, duration, traffic and IP limit.
+3. Configure plan categories.
+4. Review **Trial & Inbounds**.
+5. Enable/disable free trials as required.
+6. Select inbounds for Trial and each plan.
+7. Verify/reconcile `Customers` and `Trial` groups.
+8. Create connection guides for Android/iOS/Windows/macOS/Linux/TV.
+9. Review CRM and trial follow-up settings.
+10. Configure phone verification/channel membership if needed.
+11. Confirm operating mode is `NORMAL`.
+12. Review button styles.
+13. Configure/test an audit Telegram chat if desired.
+14. Run `/xuidiag`.
+15. Run `/groupsdiag`.
+16. Run `/notifydiag`.
+17. Issue one real trial.
+18. Run one small end-to-end purchase before heavy production use.
+
+---
 
 ## Admin Control Center
 
-Send:
+Open with:
 
 ```text
 /sudoadmin
@@ -112,180 +387,552 @@ Send:
 
 Major sections include:
 
-- Sales analytics and plan management
+- Sales analytics
+- Plans
 - Plan categories
-- Trial and inbound routing
-- Per-user custom trial settings
-- Sanaei Groups (`Customers` / `Trial`)
-- CRM and trial follow-up
-- Customer feedback analytics
+- Volume packs
+- Trial and inbounds
+- Per-user trial overrides
+- Sanaei Groups
+- CRM / follow-up
+- Customer feedback
 - Targeted broadcast
-- Rewards, referral, cashback, gift/discount codes
-- Operating mode and user restrictions
-- Authentication/membership and admins
-- Notifications and live server status
-- Backups and read-only panel snapshot
-- Audit Log
-- Button appearance and Custom Emoji
-- Payment details, texts and FAQ
+- Wallet / referral
+- Cashback / gift / discount codes
+- Blacklist
+- Operating mode
+- Verification / channel membership
+- Multiple admins
+- Service notifications
+- Backups
+- Panel snapshot
+- Audit log
+- Button styles / Custom Emoji
+- Payment data
+- Welcome / FAQ content
+
+---
 
 ## Operating modes
 
-`Normal` keeps all features available.
+### NORMAL
 
-`Sales Paused` blocks paid purchases, renewals and extra-volume checkout while account, guides and support remain available.
+Everything is available.
 
-`Maintenance` also disables new free trials. Existing account/service views, guides and support stay available so users are not locked out of help during maintenance.
+### SALES_PAUSED
+
+New purchases, renewals and volume add-ons are blocked. Existing customers can still access their account, guides and support.
+
+### MAINTENANCE
+
+New purchases and new free trials are blocked. Existing account/service visibility, guides and support remain available.
+
+---
 
 ## Plan categories
 
-Use `/sudoadmin → Plan Categories` to create groups such as:
+From `/sudoadmin`, create categories such as:
 
 ```text
 Germany
 Gaming
-Static IP
 Anti-Sanction
+Static IP
 Business
 ```
 
-Existing plans are automatically assigned to a default category during migration. Assign any plan to another category from admin.
+Existing plans are assigned to the default `عمومی` category during v4 migration and can later be moved.
 
-## Custom trial per user
+---
 
-Before a user takes their first trial, an admin can set:
+## Free trials and inbound routing
+
+Open:
 
 ```text
-TelegramID | Traffic GB | Days | IP Limit | Optional note
+/sudoadmin → Trial & Inbounds
+```
+
+You can:
+
+- Turn Trial on/off.
+- Select exact Trial inbounds.
+- Select exact inbounds independently per plan.
+- Reset a scope to all active inbounds.
+
+### Direct config vs Subscription
+
+These are separate concepts.
+
+Direct proxy links are filtered to schemes such as:
+
+```text
+vless://
+vmess://
+trojan://
+ss://
+hysteria://
+hysteria2://
+hy2://
+```
+
+HTTP/HTTPS subscription URLs remain in the Subscription section and are not mislabeled as direct configs.
+
+If a direct address is wrong, compare the bot output with 3x-ui **Copy URL**. If both contain the same wrong host, correct the inbound Share Address/Public Host in 3x-ui.
+
+---
+
+## Per-user trial overrides
+
+Before a user's first trial, an admin can define:
+
+```text
+TelegramID | VolumeGB | Days | IPLimit | Optional note
 ```
 
 Example:
 
 ```text
-123456789 | 5 | 3 | 2 | VIP prospect
+123456789 | 5 | 3 | 2 | VIP lead
 ```
 
-The normal Trial inbound selection still applies. Users without an override continue using the global trial configuration.
+Users without an override receive the normal global Trial. The configured Trial inbound selection still applies.
+
+---
+
+## Connection guides
+
+Admin path:
+
+```text
+/sudoadmin → Connection Guides
+```
+
+Supported platforms:
+
+- Android
+- iPhone / iOS
+- Windows
+- macOS
+- Linux
+- Android TV / TV Box
+
+Each guide can contain ordered:
+
+- Text
+- Photo + caption
+- Video + caption
+- Preview
+- Reordering
+
+Telegram `file_id` values are stored instead of media binaries, keeping SQLite smaller.
+
+A guide CTA can be shown after successful paid/trial provisioning.
+
+---
+
+## CRM and trial follow-up
+
+The acquisition survey can ask after the first successful purchase:
+
+- Friend recommendation
+- Telegram search
+- Channel advertisement
+- Instagram
+- Web/search
+- Returning customer
+- Other
+
+When a Trial expires, SpeedyBot can wait for a configured delay and check whether the user converted to a paid service. Converted customers are skipped.
+
+Non-buyers can answer reasons such as quality, price, setup difficulty, later purchase, no current need, ready to buy, or other. Responses can lead to purchase/support CTAs.
+
+---
+
+## Existing services and custom names
+
+### Custom service name
+
+Rules:
+
+- 3–40 characters
+- ASCII letters/numbers plus `.`, `_`, `-`
+- Checked against the local database before checkout
+- Checked against the connected 3x-ui panel for duplicates
+
+### Link an existing service
+
+A user can enter a pre-existing 3x-ui client email/name.
+
+Ownership is protected:
+
+- Matching panel `tgId` → automatic link
+- Non-matching `tgId` → admin approval required
+- A client can be linked to one SpeedyBot account only
+
+---
+
+## Payments, wallet and marketing
+
+### Manual/card payment
+
+The bot shows configured payment details, receives a receipt image and waits for admin approval before provisioning.
+
+### Wallet
+
+- Balance
+- Immutable ledger/history
+- Admin credit/debit
+- Wallet checkout
+
+### Affiliate
+
+- Permanent invite link
+- Referral stored only on first registration
+- Commission after qualifying approved/provisioned purchase
+- Exactly-once commission protection
+
+### Cashback / Discount / Gift
+
+Admins can configure:
+
+- Cashback percentage
+- Percentage discount
+- Fixed discount
+- Minimum purchase
+- Expiry / usage limit
+- Gift code for wallet credit
+
+---
+
+## Renewals
+
+Renewal keeps the same service identity and:
+
+- Preserves remaining time during early renewal.
+- Updates quota/IP limit for the selected plan.
+- Re-enables the client.
+- Resets traffic for the new period.
+- Synchronizes the client to the selected renewal plan's inbounds.
+
+---
+
+## Groups
+
+Default mapping:
+
+```text
+Paid → Customers
+Trial → Trial
+```
+
+Check live state:
+
+```text
+/groupsdiag
+```
+
+---
 
 ## Customer feedback
 
-Users can submit a 1–5 star rating and optional comment. Admin sees average rating, distribution and recent comments. Feedback can be disabled from Control Center.
+Users can leave a 1–5 star rating and an optional comment.
 
-## Targeted broadcast
+Admin analytics show:
 
-Broadcasts can copy any supported Telegram message type to selected audiences:
+- Total feedback count
+- Average rating
+- Distribution per star
+- Recent comments
 
-- all active users;
-- paid customers;
-- users who received a trial but did not buy;
-- expired-trial users who did not buy;
-- users who never purchased.
+The feature can be enabled/disabled.
 
-A result summary and broadcast history are stored after delivery.
+---
 
-## Blacklist / purchase restriction
+## Targeted broadcasts
 
-Admins can restrict a Telegram user from purchases and trials while leaving account/support access available. A reason is stored so future administrators know why the restriction exists.
+Current audience segments:
 
-## Audit Log
+- All active users
+- Customers
+- Trial users who did not buy
+- Expired-trial users who did not buy
+- Users who never bought
 
-Important v4 admin actions are written to SQLite. Optionally configure a Telegram group/channel Chat ID to receive operational events. The bot must have permission to post there.
+Messages are delivered with Telegram `copy_message`, so text/photo/video/document messages can be reused.
 
-Do not use the audit channel as your only backup.
+Always test with a small audience before sending to all customers.
 
-## Read-only panel snapshot
+---
 
-`Panel Snapshot` calls the 3x-ui client export endpoint and sends the admin a JSON snapshot. It is intentionally **read-only**; v4 does not provide a one-click destructive panel restore.
+## Audit log
 
-The snapshot contains sensitive service credentials. Never upload it to GitHub or public support chats.
+Events such as operating-mode changes, user restrictions, category changes, trial overrides, broadcasts, panel snapshots and UI changes are stored in SQLite.
+
+You can optionally mirror important events to a private Telegram group/channel where the bot has permission to post.
+
+---
+
+## Panel snapshot
+
+The admin can export a read-only JSON client snapshot from 3x-ui.
+
+Treat snapshot files as sensitive credentials. Never publish them in GitHub Issues or public chats.
+
+Automatic one-click restore is intentionally not implemented.
+
+---
 
 ## Button styles and Custom Emoji
 
-Telegram currently provides predefined button styles rather than arbitrary RGB/HEX colors:
-
-- `primary` — blue
-- `success` — green
-- `danger` — red
-- default client style
-
-Use `/sudoadmin → Appearance & Buttons` to cycle styles for Buy, Account, Trial, Guide, Support and Admin actions.
-
-Custom Emoji IDs can also be assigned. Use:
+Supported Telegram button styles:
 
 ```text
-/emojiid
+default
+primary
+success
+danger
 ```
 
-then send a Telegram Custom Emoji to extract its ID. Telegram applies eligibility rules to Custom Emoji on bot buttons. SpeedyBot therefore keeps the feature optional and performs a live test before enabling configured Premium Emoji buttons. If unavailable, normal emoji/text remains usable.
+Telegram does not expose arbitrary HEX/RGB button colors to bots.
 
-## Existing v3.1 capabilities
+For Custom Emoji:
 
-SpeedyBot still includes:
+1. Run `/emojiid`.
+2. Send a Custom Emoji.
+3. Save its ID for the desired button group.
+4. Enable Custom/Premium Emoji in admin.
 
-- paid and trial client provisioning;
-- exact inbound selection per trial and per plan;
-- direct protocol links + subscription URL + QR;
-- renewal preserving existing service identity;
-- volume packs for metered plans;
-- secure existing-client claim via `tgId` or admin approval;
-- optional custom service name with duplicate validation against bot DB and 3x-ui;
-- wallet and immutable wallet ledger;
-- one-level affiliate/referral rewards;
-- cashback;
-- percentage/fixed discount codes and gift-wallet codes;
-- phone verification and required-channel membership;
-- connection guides for Android, iOS, Windows, macOS, Linux and TV using text/photo/video;
-- acquisition-source survey;
-- smart follow-up after a free trial expires;
-- expiry/quota notifications;
-- automatic/manual SQLite backups;
-- multiple admins;
-- diagnostics: `/xuidiag`, `/groupsdiag`, `/notifydiag`.
+If Telegram rejects the icon, keep the option disabled; normal emoji/text remains functional.
 
-## CI and tests
+---
 
-Every pull request runs GitHub Actions with:
+## Notifications
 
-```text
-Python syntax: main.py, app.py, speedybot_v4/*.py
-Unit tests: v4 migrations, categories, blacklist, audiences, feedback, UI payloads
-Shell syntax: install.sh, update.sh
-Version validation
-```
+The background monitor can send one-time events for:
 
-Do not merge a PR when the required CI check is red.
+- 90% traffic warning
+- Paid-service expiry warning
+- Trial expiry warning
+- Traffic exhausted
+- Time expired
 
-## Troubleshooting
+Event claims are persisted in SQLite so a restart does not intentionally resend the same event.
 
-Bot not responding:
+---
+
+## Diagnostics
+
+### `/xuidiag`
+
+Read-only 3x-ui API diagnostics for authentication/base-path/HTTP problems.
+
+### `/groupsdiag`
+
+Live group names/member counts.
+
+### `/notifydiag`
+
+Runs the service monitor once and reports tracked/found/missing/error counts.
+
+---
+
+## Updating
+
+Read [MIGRATION_NOTES.md](MIGRATION_NOTES.md) before major releases.
+
+### Check only
 
 ```bash
+cd /root/SpeedyBot
+./update.sh --check
+```
+
+### Normal update
+
+```bash
+./update.sh
+```
+
+### Force redeploy
+
+```bash
+./update.sh --force
+```
+
+The v4 updater:
+
+1. Re-executes itself from `/tmp` so replacing `update.sh` cannot terminate the current updater.
+2. Checks GitHub `main`.
+3. Clones the remote source to a temporary directory.
+4. Validates Python and shell syntax before downtime.
+5. Installs dependencies before stopping the bot.
+6. Stops the service.
+7. Backs up `.env`, SQLite DB/WAL/SHM, source and v4 modules.
+8. Deploys the new source.
+9. Rewrites `run.sh` to prefer `app.py` with `main.py` fallback.
+10. Restarts systemd.
+11. Performs a health check.
+12. Attempts rollback when deployment fails.
+
+---
+
+## Migrating from v3.x to v4
+
+**Do not delete `.env` or `speedping.db`.**
+
+Typical upgrade:
+
+```bash
+cd /root/SpeedyBot
+./update.sh --check
+./update.sh
+```
+
+Then verify:
+
+```bash
+cat VERSION.txt
 systemctl status xui-bot.service --no-pager -l
 journalctl -u xui-bot.service -n 150 --no-pager
 ```
 
-401/403 from 3x-ui: verify the plaintext Bearer API Token.
+Expected version:
 
-404 from 3x-ui: verify API base URL, security base path and reverse-proxy routing.
+```text
+4.0.0
+```
 
-Subscription works but direct config address is wrong: compare SpeedyBot output with 3x-ui **Copy URL**. If both contain the same wrong address, fix Share Address/public host settings in 3x-ui.
+The v4 database migration is additive. Existing user, transaction, wallet, referral, trial and service data is preserved.
+
+After upgrade, test:
+
+```text
+/start
+/sudoadmin
+/xuidiag
+/groupsdiag
+/notifydiag
+```
+
+---
+
+## Backups and rollback
+
+Important runtime data:
+
+```text
+/root/SpeedyBot/.env
+/root/SpeedyBot/speedping.db
+/root/SpeedyBot/speedping.db-wal
+/root/SpeedyBot/speedping.db-shm
+/root/SpeedyBot/backups/
+```
+
+Deployment backups are typically stored under:
+
+```text
+/root/SpeedyBot/backups/deploy-YYYYMMDD-HHMMSS/
+```
+
+If deployment fails, the updater attempts to restore the previous source/database and restart the old service.
+
+For a real business, periodically copy backups off the VPS.
+
+---
+
+## Troubleshooting
+
+### Bot is not responding
+
+```bash
+systemctl status xui-bot.service --no-pager -l
+journalctl -u xui-bot.service -n 200 --no-pager
+```
+
+### Restart loop / duplicate processes
+
+```bash
+systemctl show xui-bot.service -p NRestarts
+pgrep -af 'python.*(app.py|main.py)'
+```
+
+Only the systemd-managed production process should normally use the production bot token.
+
+### 401 / 403
+
+Verify the **plaintext Bearer API token**. Do not use the token display name or panel web password.
+
+### 404
+
+Check:
+
+- API base URL
+- Hidden base path
+- Reverse-proxy routing
+- Panel API availability/version
+
+Example:
+
+```text
+Panel: https://panel.example.com:2053/secret/
+XUI_API_URL=https://panel.example.com:2053
+XUI_BASE_PATH=/secret
+```
+
+### Subscription works but direct address is wrong
+
+Compare the bot-generated direct link with 3x-ui **Copy URL**. If both contain the wrong public host, fix the inbound Share Address/Public Host inside 3x-ui.
+
+### Trial has no direct URL for one inbound
+
+Some protocols do not expose a usable share URL. Select appropriate proxy inbounds for Trial.
+
+### Edit `.env`
+
+```bash
+nano /root/SpeedyBot/.env
+systemctl restart xui-bot.service
+```
+
+Never paste `.env` into a public Issue.
+
+---
 
 ## Security
 
 - Never commit `.env`.
-- Treat panel API tokens, subscription URLs, proxy URIs, QR codes and snapshots as credentials.
-- Use HTTPS for public panel/subscription endpoints.
-- Restrict SSH access and keep Ubuntu/3x-ui updated.
-- Read [SECURITY.md](SECURITY.md) before public deployment.
+- Never expose Telegram bot tokens.
+- Never expose 3x-ui API tokens.
+- Treat subscription/direct links and QR codes as passwords.
+- Treat panel snapshot files as sensitive.
+- Keep SSH, Ubuntu and 3x-ui updated.
+- Use TLS for externally exposed panel/subscription endpoints.
+- Existing-service claims require matching `tgId` or admin approval.
+- Redact sensitive paths/tokens/domains before posting logs publicly.
 
-## Project structure
+See [SECURITY.md](SECURITY.md).
+
+---
+
+## Project layout
 
 ```text
 SpeedyBot/
-├── main.py             # stable v3 business core
-├── app.py              # v4 production entrypoint
-├── speedybot_v4/       # modular v4 features/UI
+├── main.py                    # stable v3 business core
+├── app.py                     # v4 production entrypoint
+├── speedybot_v4/
+│   ├── __init__.py
+│   ├── context.py
+│   ├── storage.py
+│   ├── ui.py
+│   ├── user_handlers.py
+│   ├── admin_handlers.py
+│   ├── trial.py
+│   ├── corepatch.py
+│   └── ops.py
 ├── tests/
+│   └── test_v4_storage.py
 ├── install.sh
 ├── update.sh
 ├── requirements.txt
@@ -293,15 +940,47 @@ SpeedyBot/
 ├── README.md
 ├── README_FA.md
 ├── CHANGELOG.md
-└── RELEASE_NOTES_v4.0.0.md
+├── MIGRATION_NOTES.md
+├── RELEASE_NOTES_v4.0.0.md
+├── SECURITY.md
+├── SUPPORT.md
+├── CONTRIBUTING.md
+├── AUTHOR.md
+├── LICENSE
+├── .env.example
+└── .github/
 ```
 
-## License & author
+Runtime files such as `.env`, SQLite databases, `.venv`, backups and logs are excluded by `.gitignore`.
 
-MIT licensed. Created and maintained by **SudoShayanNA**.
+---
+
+## Roadmap / scope
+
+Larger future modules may include:
+
+- Multi-panel routing
+- Batch-order / reseller suite
+- Multiple online payment gateways
+- Telegram Mini App
+- Independent web admin
+- AI support
+- Multi-step/dry-run panel restore
+
+These should be developed as tested modules instead of rushed patches to the core.
+
+Feature requests and bug reports are welcome through GitHub Issues. Remove all secrets before posting logs.
+
+---
+
+## License and author
+
+Licensed under the **MIT License**.
+
+Created and maintained by **SudoShayanNA**.
 
 - Telegram: **@SudoShayanNA**
 - Email: **namayandeshayan@gmail.com**
-- GitHub: **https://github.com/roseshayan/SpeedyBot**
+- Repository: **https://github.com/roseshayan/SpeedyBot**
 
-If you redistribute or build on SpeedyBot, keeping attribution and the upstream repository link helps users find security fixes and maintained releases.
+If you redistribute or build on the project, keeping a link to the original repository helps users find documentation, security updates and maintained upstream releases.
