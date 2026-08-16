@@ -1,50 +1,83 @@
 # SpeedyBot migration notes
 
-## v3.0.x → v3.1.0
+## v3.1.x → v4.0.0
 
-No new environment variables are required. Keep your existing `.env` and `speedping.db`.
+v4 is designed as an **additive migration**. The stable v3 business core remains in `main.py`; the new runtime entrypoint is `app.py`, which installs features from `speedybot_v4/` before polling starts.
 
-On first start, SpeedyBot automatically creates the new SQLite tables used for:
+### Data preserved
 
-- Trial inbound routing (`trial_inbounds`)
-- Per-plan inbound routing (`plan_inbounds`)
-- Platform connection-guide content (`guide_items`)
-- Acquisition/source survey (`user_acquisition`)
-- Trial sales follow-ups (`trial_followups`)
-- Existing-service links (`linked_services`)
-- Existing-service ownership claims (`service_claims`)
+Keep these files exactly as they are:
 
-New settings are seeded safely with these defaults:
+```text
+/root/SpeedyBot/.env
+/root/SpeedyBot/speedping.db
+```
 
-- Free trial: enabled
-- Connection guides: enabled
-- Acquisition survey: enabled
-- Trial follow-up: enabled
-- Trial follow-up delay: 6 hours
-- Custom service names: enabled
-- Link existing service: enabled
+Existing users, transactions, wallet history, referral history, trials, plan data, notifications and linked services are not deleted.
 
-If an inbound selector has no explicit rows, SpeedyBot preserves backward-compatible behavior and uses **all active inbounds**. Selecting specific inbounds in `/sudoadmin` changes that scope to the chosen list.
+### New SQLite data
 
-### Recommended upgrade procedure
+v4 adds:
+
+- `user_blocks`
+- `plan_categories`
+- `plans.category_id`
+- `trial_overrides`
+- `customer_feedback`
+- `audit_events`
+- `broadcast_history`
+
+Existing plans with no category are automatically attached to the default `عمومی` category.
+
+### Upgrade
 
 ```bash
 cd /root/SpeedyBot
 ./update.sh --check
 ./update.sh
+```
+
+The updater creates a deployment backup before replacing runtime files and switches `run.sh` to `app.py` when available.
+
+### Verify after upgrade
+
+```bash
 systemctl status xui-bot.service --no-pager -l
 journalctl -u xui-bot.service -n 100 --no-pager
 ```
 
-After upgrade, open `/sudoadmin` and review:
+Then test in Telegram:
 
-1. `🧪 تست و Inboundها`
-2. `📲 راهنمای اتصال`
-3. `📈 CRM و پیگیری`
-4. `👥 گروه‌های Sanaei`
+```text
+/start
+/sudoadmin
+/xuidiag
+/groupsdiag
+/notifydiag
+```
 
-Then test one free trial with a new Telegram account and verify that the returned direct URLs match 3x-ui's **Copy URL** output for the selected inbounds.
+Also open **Appearance & Buttons**, **Plan Categories**, **Operating Mode**, and **Feedback** once to confirm the v4 extension loaded.
 
-## Rollback
+### Rollback
 
-`update.sh` creates a timestamped backup before deployment. If the new service does not remain healthy, the updater attempts automatic rollback. Runtime data (`.env`, SQLite database and backups) is not replaced by repository defaults.
+If the new service fails its updater health check, `update.sh` attempts to restore the previous source and SQLite database automatically.
+
+Manual deployment backups are under:
+
+```text
+/root/SpeedyBot/backups/deploy-YYYYMMDD-HHMMSS/
+```
+
+Do not remove these backups until v4 has been running successfully in production.
+
+### No new secrets required
+
+v4 does not require a new environment variable. Premium/Custom Emoji IDs, UI settings, audit Chat ID, categories and operating mode are stored in SQLite.
+
+## v3.0.x → v3.1.0
+
+v3.1 added trial/plan inbound routing, connection guides, acquisition CRM, trial follow-up, custom service names and secure existing-service claims. Migration was additive and required no new environment variables.
+
+## Security reminder
+
+Never publish `.env`, service URLs, proxy URIs, QR codes or read-only panel snapshot files in GitHub Issues.
