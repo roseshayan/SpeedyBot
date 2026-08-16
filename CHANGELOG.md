@@ -3,37 +3,52 @@
 ## 4.0.0 — Control Center & Growth Suite
 
 ### Added
-- Modular v4 extension architecture with `app.py` + `speedybot_v4/`, leaving the stable v3 core in `main.py` intact.
 - Redesigned customer account, categorized storefront and reorganized Telegram admin Control Center.
 - Official Telegram button style support (`primary`, `success`, `danger`, default) for key user/admin actions.
-- Optional Custom/Premium Emoji IDs for important buttons, `/emojiid` helper and a live eligibility test before activation.
+- Optional Custom/Premium Emoji IDs for important buttons, `/emojiid` helper and live eligibility testing.
 - Operating modes: `NORMAL`, `SALES_PAUSED`, `MAINTENANCE`.
 - User purchase/trial restriction (blacklist) with reason and audit events.
-- Plan categories with migration of existing plans to a default category.
-- Per-user trial overrides for traffic, days and IP limit while preserving Trial inbound routing.
+- Plan categories with automatic migration of existing plans to a default category.
+- Per-user Trial overrides for traffic, days and IP limit while preserving Trial inbound routing.
 - Customer feedback: 1–5 stars, optional comment, distribution and average-rating dashboard.
-- Targeted broadcasts for all active users, customers, trial leads, expired-trial leads and users who never purchased.
+- Targeted broadcasts for active users, customers, Trial leads, expired-Trial leads and users who never purchased.
 - SQLite Audit Log with optional Telegram audit channel.
 - Read-only emergency 3x-ui client snapshot export.
-- v4 unit tests for migrations, categories, blacklist, audience segmentation, feedback and button payloads.
+- Unit tests for migrations, categories, blacklist, audience segmentation, feedback and button payloads.
 
-### Changed
-- `install.sh` can deploy the modular v4 runtime and still supports the existing v3 layout.
-- `update.sh` now re-executes from a temporary copy, validates the modular source before downtime, backs up v4 directories and falls back to the previous build on deployment failure.
-- `run.sh` uses `app.py` when available and falls back to `main.py` for older builds.
-- GitHub Actions validates `main.py`, `app.py`, all `speedybot_v4/*.py`, unit tests, shell syntax and the release version.
-- Admin/user messages and navigation have been reorganized for faster scanning and fewer dense menus.
+### Architecture
+- v4 is now the **integrated SpeedyBot application**, not a versioned overlay.
+- Root `main.py` is the single official production entrypoint.
+- Business logic and Control Center modules live in the permanent `speedybot/` package.
+- The former `app.py` entrypoint and `speedybot_v4/` directory were removed.
+- The previous monolithic business core was moved without functional rewriting to `speedybot/core.py` and is loaded by the integrated entrypoint.
+- Tests were renamed from `test_v4_storage.py` to the version-independent `test_storage.py`.
+
+### Installer / updater
+- `install.sh` installs the complete repository layout and always runs `main.py`.
+- `update.sh` re-executes from a temporary copy before self-update.
+- Updates now synchronize the **entire GitHub repository** with `rsync --delete`, rather than maintaining a fragile manual file list.
+- Mutable runtime state is excluded from synchronization: `.env`, `.venv/`, SQLite DB/WAL/SHM, `backups/`, `run.sh` and `.deployed_commit`.
+- A complete application + runtime rollback backup is created before synchronization.
+- Obsolete files/directories are automatically removed during upgrade because the deployed application mirrors the current repository.
+- The updater performs Python/shell validation, dependency installation, systemd restart, health checks and automatic rollback on failure.
+- GitHub Actions validates the integrated `main.py`, all `speedybot/*.py`, unit tests, shell scripts and repository layout.
+
+### UX
+- Admin/user messages and navigation were reorganized for faster scanning and less dense menus.
+- Shop and account screens now use the categorized v4 experience.
+- Official Telegram button styling and optional Custom Emoji remain backward-safe with normal-text/emoji fallback.
 
 ### Security / safety
 - Panel Snapshot is intentionally read-only; no destructive one-click restore was added.
 - Existing runtime secrets remain in `.env`; v4 introduces no new required secret.
 - Blacklisted users retain support/account visibility rather than being silently locked out of help.
-- Custom Emoji is optional and has a normal-text/emoji fallback.
+- Complete-project updates never overwrite runtime secrets or the production SQLite database from GitHub.
 
 ## 3.1.0 — Trial delivery, inbound routing & lightweight CRM
 
 ### Fixed
-- Corrected free-trial direct-link delivery using 3x-ui client-link APIs instead of mislabeling subscription URLs.
+- Corrected free-Trial direct-link delivery using 3x-ui client-link APIs instead of mislabeling subscription URLs.
 - Filtered direct links to actual proxy URI schemes.
 - Re-synchronized configured Trial/Plan inbounds during idempotent retries.
 
@@ -41,7 +56,7 @@
 - Per-plan and Trial inbound routing.
 - Trial on/off switch.
 - Admin-managed platform connection guides with text/photo/video.
-- Acquisition-source survey and trial-expiry sales follow-up.
+- Acquisition-source survey and Trial-expiry sales follow-up.
 - Custom service names with local/panel duplicate checks.
 - Secure existing-service claims via matching `tgId` or admin approval.
 
