@@ -1,5 +1,6 @@
 from __future__ import annotations
 import sqlite3, time
+from html import escape
 from typing import Any, Dict, Optional, Tuple
 
 CORE = None
@@ -68,14 +69,20 @@ def reply(text: str, key: str, style_name=None):
 
 def audit(event: str, actor=None, target=None, detail="", send=True):
     txt=str(detail or "")[:3000]
+    target_text=str(target)[:200] if target is not None else None
     try:
         c=db(); c.execute("INSERT INTO audit_events(event_type,actor_id,target_id,detail,created_at) VALUES (?,?,?,?,?)",
-            (str(event)[:80],int(actor) if actor else None,str(target)[:200] if target is not None else None,txt,int(time.time()))); c.commit(); c.close()
+            (str(event)[:80],int(actor) if actor else None,target_text,txt,int(time.time()))); c.commit(); c.close()
     except Exception: pass
     if not send or setting("audit_enabled","1")!="1": return
     cid=setting("audit_chat_id","").strip()
     if not cid: return
-    try: BOT.send_message(int(cid),f"🧾 <b>{event}</b>\nActor: <code>{actor or '-'}</code>\nTarget: <code>{target if target is not None else '-'}</code>\n{txt}",parse_mode="HTML")
+    try:
+        BOT.send_message(
+            int(cid),
+            f"🧾 <b>{escape(str(event)[:80])}</b>\nActor: <code>{escape(str(actor or '-'))}</code>\nTarget: <code>{escape(target_text or '-')}</code>\n{escape(txt)}",
+            parse_mode="HTML"
+        )
     except Exception: pass
 
 def promote_message():
