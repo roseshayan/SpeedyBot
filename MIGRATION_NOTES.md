@@ -2,9 +2,9 @@
 
 ## v3.1.x → v4.0.0
 
-SpeedyBot v4 is now shipped as **one integrated application**, not as a versioned extension layer.
+SpeedyBot v4 is shipped as **one integrated application**, not as a versioned extension layer.
 
-The production entrypoint remains the familiar root file:
+The production entrypoint is:
 
 ```text
 /root/SpeedyBot/main.py
@@ -71,9 +71,27 @@ Before synchronization, the updater:
 8. Restarts and health-checks the service.
 9. Restores the previous complete application if deployment fails.
 
+### One-time updater refresh for older installations
+
+Older SpeedyBot installations may still have the pre-integrated updater that copies a fixed list of files. That updater cannot deploy the new `speedybot/` package correctly.
+
+Before the **first** upgrade to the integrated layout, replace only the updater file in the existing installation directory:
+
+```bash
+cd /root/SpeedyBot
+cp -a update.sh update.sh.pre-integrated-v4
+curl -fsSL https://raw.githubusercontent.com/roseshayan/SpeedyBot/main/update.sh -o update.sh
+chmod 700 update.sh
+bash -n update.sh
+```
+
+This does **not** create another SpeedyBot installation and does not use a second application directory. It only refreshes `/root/SpeedyBot/update.sh` in place.
+
+After that, all future releases can use the normal updater directly.
+
 ### Important when upgrading from the earlier v4 overlay build
 
-The updater automatically removes obsolete source paths such as:
+The integrated updater automatically removes obsolete source paths such as:
 
 ```text
 app.py
@@ -90,6 +108,8 @@ tests/test_storage.py
 ```
 
 ### Upgrade
+
+After the one-time updater refresh (if required):
 
 ```bash
 cd /root/SpeedyBot
