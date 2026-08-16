@@ -24,8 +24,11 @@ def _shop(message):
     blocked,reason=C.blocked(message.from_user.id)
     if blocked:
         C.BOT.send_message(message.chat.id,'🚫 امکان خرید برای حساب شما غیرفعال است.'+(f'\nدلیل: {reason}' if reason else ''),reply_markup=ui.main_menu()); return
-    if C.mode() in {'SALES_PAUSED','MAINTENANCE'}:
-        C.BOT.send_message(message.chat.id,C.setting('maintenance_message','🛠 فروش موقتاً متوقف است.'),reply_markup=ui.main_menu()); return
+    current_mode=C.mode()
+    if current_mode=='SALES_PAUSED':
+        C.BOT.send_message(message.chat.id,C.setting('sales_paused_message','🛒 فروش و تمدید موقتاً متوقف شده است.'),reply_markup=ui.main_menu()); return
+    if current_mode=='MAINTENANCE':
+        C.BOT.send_message(message.chat.id,C.setting('maintenance_message','🛠 سرویس موقتاً در حال نگهداری است.'),reply_markup=ui.main_menu()); return
     if C.setting('plan_categories_enabled','1')!='1': return C.CORE.show_plans(message)
     m,rows=ui.categories_markup()
     if not rows: return C.CORE.show_plans(message)
