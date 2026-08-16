@@ -19,12 +19,18 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Python syntax
-        run: python -m py_compile main.py app.py speedybot_v4/*.py
+        run: python -m py_compile main.py speedybot/*.py
       - name: Unit tests
         run: python -m unittest discover -s tests -v
       - name: Shell syntax
         run: |
           bash -n install.sh
           bash -n update.sh
+      - name: Integrated layout
+        run: |
+          test -f main.py
+          test -f speedybot/core.py
+          test ! -e app.py
+          test ! -e speedybot_v4
       - name: Version file
         run: test "$(cat VERSION.txt)" = "4.0.0"
