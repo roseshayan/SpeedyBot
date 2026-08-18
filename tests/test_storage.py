@@ -1,9 +1,10 @@
+import base64
 import os
 import sqlite3
 import tempfile
 import unittest
 
-from speedybot import context as C, storage
+from speedybot import context as C, corepatch, storage
 
 
 class FakeTypes:
@@ -64,10 +65,10 @@ class StorageTests(unittest.TestCase):
             "VALUES ('Plan A',100,0,30,1,1,10,1,1)"
         )
         con.execute("CREATE TABLE users(id INTEGER PRIMARY KEY,is_active INTEGER,balance INTEGER)")
-        con.execute("CREATE TABLE transactions(id INTEGER PRIMARY KEY,user_id INTEGER,status TEXT,kind TEXT)")
+        con.execute("CREATE TABLE transactions(id INTEGER PRIMARY KEY,user_id INTEGER,plan_id INTEGER,status TEXT,kind TEXT)")
         con.execute("CREATE TABLE trial_services(user_id INTEGER,status TEXT)")
         con.executemany("INSERT INTO users(id,is_active,balance) VALUES (?,?,0)", [(10, 1), (20, 1), (30, 1)])
-        con.execute("INSERT INTO transactions(id,user_id,status,kind) VALUES (1,10,'APPROVED','NEW')")
+        con.execute("INSERT INTO transactions(id,user_id,plan_id,status,kind) VALUES (1,10,1,'APPROVED','NEW')")
         con.execute("INSERT INTO trial_services(user_id,status) VALUES (20,'EXPIRED')")
         con.commit()
         con.close()
@@ -86,6 +87,11 @@ class StorageTests(unittest.TestCase):
         con.close()
         self.assertEqual(category["name"], "عمومی")
         self.assertEqual(plan["category_id"], category["id"])
+
+    def test_global_trial_defaults_are_seeded(self):
+        self.assertEqual(C.setting("trial_default_volume_gb", ""), "1")
+        self.assertEqual(C.setting("trial_default_days", ""), "1")
+        self.assertEqual(C.setting("trial_default_ip_limit", ""), "1")
 
     def test_blacklist_lookup(self):
         con = sqlite3.connect("speedping.db")
@@ -122,6 +128,30 @@ class StorageTests(unittest.TestCase):
         text = storage.feedback_text()
         self.assertIn("5.00/5", text)
         self.assertIn("great", text)
+
+    def test_subscription_direct_links_plain_and_base64(self):
+        raw = "vless://one\nvmess://two\nhttps://subscription.example/sub/x"
+        self.assertEqual(corepatch._decode_subscription_text(raw), ["vless://one", "vmess://two"])
+        encoded = base64.b64encode(raw.encode()).decode()
+        self.assertEqual(corepatch._decode_subscription_text(encoded), ["vless://one", "vmess://two"])
+
+    def test_default_all_inbound_click_removes_clicked(self):
+        stored, selected, changed = corepatch._toggle_effective([1, 2, 3], [], 2)
+        self.assertTrue(changed)
+        self.assertFalse(selected)
+        self.assertEqual(stored, [1, 3])
+
+    def test_explicit_selection_can_return_to_default_all(self):
+        stored, selected, changed = corepatch._toggle_effective([1, 2, 3], [1, 3], 2)
+        self.assertTrue(changed)
+        self.assertTrue(selected)
+        self.assertEqual(stored, [])
+
+    def test_at_least_one_inbound_is_kept(self):
+        stored, selected, changed = corepatch._toggle_effective([1, 2], [2], 2)
+        self.assertFalse(changed)
+        self.assertTrue(selected)
+        self.assertEqual(stored, [2])
 
 
 if __name__ == "__main__":
