@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.0.1 — Routing & Installer Reliability Patch
+
+### Fixed
+- Direct configs now prefer the real public 3x-ui subscription body, so manually delivered links match what a customer's subscription client receives. Plain and Base64 subscription bodies are supported; panel API-generated links remain a fallback.
+- Trial/Plan Inbound selection now represents the effective state correctly: legacy empty selection means **all active Inbounds**, and the UI shows those Inbounds as selected instead of unchecked.
+- Clicking a selected Inbound while in default-all mode now creates an explicit selection containing all other active Inbounds, so the clicked Inbound is actually excluded.
+- Client Inbound synchronization now verifies the persisted `inboundIds` from 3x-ui after attach/detach and refuses to report success if the panel state differs from the configured selection.
+- The installer now clearly explains that Bot/API token input is hidden, confirms receipt without displaying the secret, and retries invalid Telegram Bot Token input instead of exiting immediately.
+
+### Added
+- Global Free Trial settings for traffic, duration and IP limit. Per-user Trial overrides still take priority.
+- A refreshed Trial/Inbound admin screen with live checkmarks and immediate state refresh after every toggle.
+- Safe Plan deletion for unused plans. Plans referenced by transaction history cannot be hard-deleted and should be deactivated instead.
+- Safe Category deletion; plans inside a deleted category are moved to another category before deletion.
+- Unit tests for plain/Base64 subscription parsing and default-all/explicit Inbound toggle semantics.
+
 ## 4.0.0 — Control Center & Growth Suite
 
 ### Added
