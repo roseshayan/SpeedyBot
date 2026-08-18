@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.0.2 — Admin Interaction & Guidance Patch
+
+### Fixed
+- Admin inline navigation now clears any stale `register_next_step_handler` state before starting another management action. This prevents an unfinished previous wizard (for example Plan Edit) from consuming the next admin input or making repeated button use feel stuck.
+- Legacy admin menu callbacks that previously left Telegram's loading spinner active are now acknowledged immediately.
+- Repeated use of the same admin action is now safe: clicking the button again cancels the old pending step and starts a fresh wizard.
+- Internal runtime package version is synchronized with `VERSION.txt`; CI now verifies both values.
+
+### Improved
+- Admin input wizards now use readable Persian instructions instead of compact field-only strings.
+- Plan Add/Edit/Toggle screens explain every field and show the current Plan IDs/values where useful.
+- Discount, Gift Code, Trial, Category, Affiliate, Bank, Channel, Guide, Blacklist, Broadcast and deletion workflows now include concrete examples and safety notes.
+- Every intercepted admin wizard includes an explicit **Cancel operation and return to admin panel** button.
+- Starting another inline admin action automatically cancels the previous unfinished input step.
+
 ## 4.0.1 — Routing & Installer Reliability Patch
 
 ### Fixed
