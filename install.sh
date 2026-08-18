@@ -17,7 +17,21 @@ trap 'printf "${RED}[ERROR]${NC} Installation failed at line %s.\n" "$LINENO" >&
 
 trim(){ local v="$1"; v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"; printf '%s' "$v"; }
 prompt(){ local p="$1" d="${2-}" v=""; while true; do if [[ -n "$d" ]]; then read -r -p "$p [$d]: " v || true; v="$(trim "${v:-$d}")"; else read -r -p "$p: " v || true; v="$(trim "${v:-}")"; fi; [[ -n "$v" ]] && { printf '%s' "$v"; return; }; warn "Value cannot be empty."; done; }
-secret(){ local p="$1" v=""; while true; do printf '%s: ' "$p" >&2; read -r -s v || true; printf '\n' >&2; v="$(printf '%s' "$v" | tr -d '\n\r\t')"; [[ -n "$v" ]] && { printf '%s' "$v"; return; }; warn "Value cannot be empty."; done; }
+secret(){
+  local p="$1" v=""
+  while true; do
+    printf '%s [input hidden — paste/type, then press Enter]: ' "$p" >&2
+    IFS= read -r -s v || true
+    printf '\n' >&2
+    v="$(printf '%s' "$v" | tr -d '\n\r\t')"
+    if [[ -n "$v" ]]; then
+      printf "${GREEN}[OK]${NC} Secret received (%d characters).\n" "${#v}" >&2
+      printf '%s' "$v"
+      return
+    fi
+    warn "Nothing was received. Paste/type the value even though it is not shown, then press Enter."
+  done
+}
 confirm(){ local a=""; read -r -p "$1 [y/N]: " a || true; [[ "${a,,}" =~ ^(y|yes)$ ]]; }
 normalize_base_path(){ local v; v="$(trim "$1")"; [[ -z "$v" ]] && v="/"; [[ "$v" != /* ]] && v="/$v"; [[ "$v" != "/" ]] && v="${v%/}"; printf '%s' "$v"; }
 normalize_sub_path(){ local v; v="$(trim "$1")"; [[ -z "$v" ]] && v="/sub/"; [[ "$v" != /* ]] && v="/$v"; [[ "$v" != */ ]] && v="$v/"; printf '%s' "$v"; }
@@ -38,7 +52,14 @@ command -v apt-get >/dev/null 2>&1 || fail "apt-get was not found. Ubuntu/Debian
 [[ -d "$SOURCE_DIR/speedybot" ]] || fail "speedybot application package is missing."
 
 printf '\n============================================================\n SpeedyBot installer\n Telegram sales + 3x-ui / Sanaei automation\n============================================================\n\n'
-BOT_TOKEN="$(secret "Telegram bot token")"; [[ "$BOT_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]{20,}$ ]] || fail "Telegram bot token format is invalid."
+printf 'Note: Bot/API tokens are intentionally hidden while typing. Your paste still works; press Enter after pasting.\n\n'
+while true; do
+  BOT_TOKEN="$(secret "Telegram bot token")"
+  if [[ "$BOT_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]{20,}$ ]]; then
+    break
+  fi
+  warn "Telegram bot token format looks invalid. Copy the full token from @BotFather and try again."
+done
 ADMIN_ID="$(prompt "Telegram admin numeric ID")"; [[ "$ADMIN_ID" =~ ^[0-9]+$ && "$ADMIN_ID" != "0" ]] || fail "Admin ID must be numeric."
 XUI_API_URL="$(prompt "X-UI API base URL (scheme + host + port only)" "http://127.0.0.1:2053")"; XUI_API_URL="${XUI_API_URL%/}"; [[ "$XUI_API_URL" =~ ^https?://[^[:space:]/?#]+(:[0-9]{1,5})?$ ]] || fail "Invalid X-UI API base URL."
 XUI_BASE_PATH="$(normalize_base_path "$(prompt "X-UI security base path" "/")")"
