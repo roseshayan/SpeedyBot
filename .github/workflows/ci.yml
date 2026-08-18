@@ -30,7 +30,8 @@ jobs:
         run: |
           test -f main.py
           test -f speedybot/core.py
+          test -f speedybot/admin_tools.py
           test ! -e app.py
           test ! -e speedybot_v4
       - name: Version file
-        run: test "$(cat VERSION.txt)" = "4.0.0"
+        run: test "$(cat VERSION.txt)" = "4.0.1"
