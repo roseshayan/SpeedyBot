@@ -93,6 +93,29 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(C.setting("trial_default_days", ""), "1")
         self.assertEqual(C.setting("trial_default_ip_limit", ""), "1")
 
+    def test_brand_and_customer_menu_defaults_are_seeded(self):
+        self.assertEqual(C.brand_name(), "فروشگاه")
+        for key in C.CUSTOMER_MENU_KEYS:
+            self.assertTrue(C.menu_visible(key), key)
+        C.set_setting("menu_feedback_visible", "0")
+        self.assertFalse(C.menu_visible("feedback"))
+
+    def test_legacy_default_copy_is_white_labeled_on_upgrade(self):
+        legacy_welcome = "سلام به ربات فروش خودکار **SpeedPing** خوش آمدید! 🚀\nاز منوی زیر اقدام به خرید یا مدیریت حساب خود کنید."
+        legacy_faq = "📚 **راهنمای SpeedPing**\n\n• برای خرید از بخش پلان‌ها استفاده کنید.\n• لینک Subscription را همیشه نگه دارید و برای به‌روزرسانی کانفیگ‌ها Refresh کنید.\n• برای تمدید یا خرید حجم اضافه وارد حساب کاربری شوید.\n• در صورت مشکل از بخش پشتیبانی پیام بدهید."
+        C.set_setting("welcome_text", legacy_welcome)
+        C.set_setting("faq_text", legacy_faq)
+        storage.init_db()
+        self.assertNotIn("SpeedPing", C.setting("welcome_text", ""))
+        self.assertNotIn("SpeedPing", C.setting("faq_text", ""))
+        self.assertIn("فروشگاه", C.setting("welcome_text", ""))
+
+    def test_custom_welcome_copy_is_preserved_on_upgrade(self):
+        custom = "متن اختصاصی فروشنده بدون قالب پیش‌فرض"
+        C.set_setting("welcome_text", custom)
+        storage.init_db()
+        self.assertEqual(C.setting("welcome_text", ""), custom)
+
     def test_blacklist_lookup(self):
         con = sqlite3.connect("speedping.db")
         con.execute(

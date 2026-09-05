@@ -11,6 +11,17 @@ EMOJI_KEYS = {
     "buy": "خرید", "account": "حساب کاربری", "trial": "تست رایگان",
     "guide": "راهنمای اتصال", "support": "پشتیبانی", "admin": "پنل مدیریت",
 }
+CUSTOMER_MENU_KEYS = {
+    "buy": "🛍 مشاهده و خرید پلان‌ها",
+    "account": "👤 حساب کاربری",
+    "trial": "🎁 دریافت تست رایگان",
+    "affiliate": "🤝 همکاری در فروش",
+    "guide": "📲 راهنمای اتصال",
+    "faq": "📚 راهنما و سوالات",
+    "rewards": "🎟 کد هدیه / تخفیف",
+    "feedback": "⭐ نظر و امتیاز",
+    "support": "📞 پشتیبانی",
+}
 
 def configure(core):
     global CORE, BOT
@@ -26,6 +37,13 @@ def setting(key: str, default: str = "") -> str:
 
 def set_setting(key: str, value: Any):
     CORE.update_db_setting(key, str(value))
+
+def brand_name() -> str:
+    value = setting("brand_name", "فروشگاه").strip()
+    return (value or "فروشگاه")[:64]
+
+def menu_visible(key: str, default: str = "1") -> bool:
+    return setting(f"menu_{key}_visible", default).strip() == "1"
 
 def is_admin(uid: int) -> bool:
     try: return bool(CORE.is_admin(int(uid)))

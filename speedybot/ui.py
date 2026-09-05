@@ -1,3 +1,5 @@
+from html import escape
+
 from . import context as C
 from .storage import backfill_categories
 
@@ -5,17 +7,28 @@ from .storage import backfill_categories
 def main_menu():
     t = C.CORE.types
     m = t.ReplyKeyboardMarkup(resize_keyboard=True, is_persistent=True)
-    m.row(C.reply("🛍 مشاهده و خرید پلان‌ها", "buy"), C.reply("👤 حساب کاربری", "account"))
-    if C.CORE.trial_enabled():
-        m.row(C.reply("🎁 دریافت تست رایگان", "trial"), t.KeyboardButton("🤝 همکاری در فروش"))
-    else:
-        m.row(t.KeyboardButton("🤝 همکاری در فروش"))
-    m.row(C.reply("📲 راهنمای اتصال", "guide"), t.KeyboardButton("📚 راهنما و سوالات"))
-    if C.setting("feedback_enabled", "1") == "1":
-        m.row(t.KeyboardButton("🎟 کد هدیه / تخفیف"), t.KeyboardButton("⭐ نظر و امتیاز"))
-        m.row(C.reply("📞 پشتیبانی", "support"))
-    else:
-        m.row(t.KeyboardButton("🎟 کد هدیه / تخفیف"), C.reply("📞 پشتیبانی", "support"))
+    buttons = []
+    if C.menu_visible("buy"):
+        buttons.append(C.reply("🛍 مشاهده و خرید پلان‌ها", "buy"))
+    if C.menu_visible("account"):
+        buttons.append(C.reply("👤 حساب کاربری", "account"))
+    if C.menu_visible("trial") and C.CORE.trial_enabled():
+        buttons.append(C.reply("🎁 دریافت تست رایگان", "trial"))
+    if C.menu_visible("affiliate"):
+        buttons.append(t.KeyboardButton("🤝 همکاری در فروش"))
+    if C.menu_visible("guide"):
+        buttons.append(C.reply("📲 راهنمای اتصال", "guide"))
+    if C.menu_visible("faq"):
+        buttons.append(t.KeyboardButton("📚 راهنما و سوالات"))
+    if C.menu_visible("rewards"):
+        buttons.append(t.KeyboardButton("🎟 کد هدیه / تخفیف"))
+    if C.menu_visible("feedback") and C.setting("feedback_enabled", "1") == "1":
+        buttons.append(t.KeyboardButton("⭐ نظر و امتیاز"))
+    if C.menu_visible("support"):
+        buttons.append(C.reply("📞 پشتیبانی", "support"))
+
+    for i in range(0, len(buttons), 2):
+        m.row(*buttons[i : i + 2])
     return m
 
 
@@ -68,6 +81,9 @@ def admin_menu():
             C.inline("🧾 Audit Log", callback_data="plus:audit"),
         ),
         (
+            C.inline("🏷 برند و منوی مشتری", callback_data="custom:panel", style_name="primary"),
+        ),
+        (
             C.inline("🎨 ظاهر و دکمه‌ها", callback_data="plus:ui", style_name="primary", emoji_key="admin"),
             C.inline("💳 حساب واریز", callback_data="admin:bank_config"),
         ),
@@ -80,8 +96,8 @@ def admin_menu():
             C.inline("↩️ بروزرسانی منو", callback_data="plus:home"),
         ),
     ]
-    for a, b in rows:
-        m.row(a, b)
+    for row in rows:
+        m.row(*row)
     return m
 
 
@@ -95,7 +111,7 @@ def admin_home():
     mt = {"NORMAL": "🟢 عادی", "SALES_PAUSED": "🟠 فروش متوقف", "MAINTENANCE": "🔴 تعمیرات"}[C.mode()]
     return "\n".join(
         [
-            "🛠 <b>SpeedyBot Control Center</b>",
+            f"🛠 <b>{escape(C.brand_name())} Control Center</b>",
             "━━━━━━━━━━━━━━━━",
             f"⚙️ حالت سیستم: <b>{mt}</b>",
             f"🎁 تست رایگان: <b>{'🟢 فعال' if C.CORE.trial_enabled() else '🔴 غیرفعال'}</b>",
