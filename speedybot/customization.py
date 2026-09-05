@@ -4,6 +4,9 @@ from . import context as C
 from . import ui
 
 
+DOPRAX_REFERRAL_URL = "https://www.doprax.com/r/sudoshayan/"
+
+
 def _send(chat_id, text, markup=None):
     C.BOT.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
 
@@ -44,6 +47,27 @@ def _panel(chat_id):
         "ℹ️ مخفی‌کردن دکمه، آن را از رابط مشتری حذف می‌کند. برای «نظر و امتیاز»، کلید فعال/غیرفعال‌سازی کامل قابلیت همچنان در بخش بازخورد مشتری وجود دارد.",
     ]
     _send(chat_id, "\n".join(lines), markup)
+
+
+def _hosting_offer(chat_id):
+    markup = C.CORE.types.InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        C.inline(
+            "🚀 مشاهده و خرید سرور در Doprax",
+            url=DOPRAX_REFERRAL_URL,
+            style_name="success",
+        )
+    )
+    _send(
+        chat_id,
+        "☁️ <b>برای اجرای ربات به سرور مجازی نیاز دارید؟</b>\n"
+        "━━━━━━━━━━━━━━━━\n"
+        "می‌توانید VPS را از لوکیشن‌های مختلف به‌صورت ساعتی تهیه کنید و فقط به اندازه مصرف خود هزینه پرداخت کنید.\n\n"
+        "💳 امکان پرداخت ریالی نیز وجود دارد.\n"
+        "🌍 مناسب برای راه‌اندازی ربات، پنل و سرویس‌های شخصی روی لوکیشن‌های مختلف.\n\n"
+        "ℹ️ لینک زیر، لینک معرفی توسعه‌دهنده SpeedyBot است؛ خرید از این لینک به توسعه و نگهداری پروژه کمک می‌کند.",
+        markup,
+    )
 
 
 def _save_brand(message, actor):
@@ -111,6 +135,10 @@ def callback(call):
     if action == "home":
         C.BOT.answer_callback_query(call.id)
         _send(chat_id, ui.admin_home(), ui.admin_menu())
+        return
+    if action == "hosting":
+        C.BOT.answer_callback_query(call.id)
+        _hosting_offer(chat_id)
         return
     if action == "brand":
         C.BOT.answer_callback_query(call.id)
