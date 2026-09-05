@@ -82,6 +82,7 @@ def admin_menu():
         ),
         (
             C.inline("🏷 برند و منوی مشتری", callback_data="custom:panel", style_name="primary"),
+            C.inline("☁️ سرور مجازی ساعتی", callback_data="custom:hosting", style_name="success"),
         ),
         (
             C.inline("🎨 ظاهر و دکمه‌ها", callback_data="plus:ui", style_name="primary", emoji_key="admin"),

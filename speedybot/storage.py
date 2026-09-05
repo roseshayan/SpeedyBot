@@ -48,6 +48,12 @@ def init_db():
         "trial_default_ip_limit": "1",
         "audit_enabled": "1",
         "audit_chat_id": "",
+        "monitor_alert_after_failures": "3",
+        "monitor_alert_cooldown_seconds": "21600",
+        "monitor_recovery_notifications": "1",
+        "update_notifications_enabled": "1",
+        "update_check_interval_seconds": "21600",
+        "last_update_notified_version": "",
         "ui_premium_emoji_enabled": "0",
         "ui_style_buy": "success",
         "ui_style_account": "primary",
@@ -65,8 +71,6 @@ def init_db():
     for k, v in defaults.items():
         c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES (?,?)", (k, v))
 
-    # Only rewrite untouched legacy defaults. Custom texts written by an admin
-    # are deliberately preserved during upgrades.
     legacy_welcome = "سلام به ربات فروش خودکار **SpeedPing** خوش آمدید! 🚀\nاز منوی زیر اقدام به خرید یا مدیریت حساب خود کنید."
     neutral_welcome = "سلام به **فروشگاه** خوش آمدید! 🚀\nاز منوی زیر اقدام به خرید یا مدیریت حساب خود کنید."
     legacy_faq = "📚 **راهنمای SpeedPing**\n\n• برای خرید از بخش پلان‌ها استفاده کنید.\n• لینک Subscription را همیشه نگه دارید و برای به‌روزرسانی کانفیگ‌ها Refresh کنید.\n• برای تمدید یا خرید حجم اضافه وارد حساب کاربری شوید.\n• در صورت مشکل از بخش پشتیبانی پیام بدهید."

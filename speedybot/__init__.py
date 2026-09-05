@@ -1,6 +1,6 @@
 """SpeedyBot application package."""
 
-VERSION = "4.1.0"
+VERSION = "4.2.0"
 
 
 def install(core):
@@ -13,5 +13,7 @@ def install(core):
 
 
 def start_background():
-    """Start package-owned background workers when added in future releases."""
-    return None
+    """Start package-owned background workers."""
+    from . import updates
+
+    updates.start()

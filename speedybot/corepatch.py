@@ -58,38 +58,128 @@ def _toggle_effective(active_ids, persisted_ids, clicked_id):
     active = {int(x) for x in active_ids}
     clicked = int(clicked_id)
     raw = {int(x) for x in persisted_ids}
-    effective = (set(active) if not raw else (raw & active))
+    effective = set(active) if not raw else (raw & active)
 
     if clicked not in active:
         return sorted(raw), False, False
 
     if clicked in effective:
-        # 3x-ui requires at least one inbound on client creation. Do not let the
-        # UI accidentally represent "none" as the legacy "all" sentinel.
         if len(effective) <= 1:
             return sorted(raw), True, False
         effective.remove(clicked)
     else:
         effective.add(clicked)
 
-    # Empty rows are the backwards-compatible representation for ALL active.
     stored = [] if effective == active else sorted(effective)
     return stored, clicked in effective, True
 
 
+def _setting_int(key, default, minimum, maximum):
+    try:
+        value = int(C.setting(key, str(default)) or default)
+    except Exception:
+        value = default
+    return max(minimum, min(value, maximum))
+
+
+def _monitor_error_summary(exc):
+    raw = str(exc or "").strip()
+    low = raw.lower()
+    if any(
+        marker in low
+        for marker in (
+            "nameresolutionerror",
+            "failed to resolve",
+            "temporary failure in name resolution",
+            "name or service not known",
+        )
+    ):
+        return "خطای DNS سرور: دامنه پنل موقتاً Resolve نشده است. DNS/Resolver سرور و رکورد دامنه پنل را بررسی کنید."
+    if "connecttimeout" in low or "connection timed out" in low:
+        return "اتصال به پنل Timeout شده است. دسترسی شبکه، فایروال و پورت پنل را بررسی کنید."
+    if "connection refused" in low:
+        return "اتصال به پنل Refuse شده است. سرویس 3x-ui و پورت پنل را بررسی کنید."
+    if "max retries exceeded" in low:
+        return "ارتباط با پنل پس از چند تلاش برقرار نشد. وضعیت DNS، شبکه و سرویس 3x-ui را بررسی کنید."
+    return raw[:500] or "خطای نامشخص ارتباط با پنل"
+
+
+def _service_monitor_loop(core):
+    """Run the monitor with outage alert debouncing and recovery notice."""
+    time.sleep(10)
+    consecutive_errors = 0
+    last_alert_at = 0
+    outage_alerted = False
+
+    while True:
+        try:
+            try:
+                core.maybe_automatic_backup()
+            except Exception as backup_error:
+                core.notify_admins(
+                    f"⚠️ بکاپ خودکار {C.brand_name()} خطا داد: {str(backup_error)[:500]}"
+                )
+
+            if core.service_notifications_enabled():
+                result = core.check_service_notifications()
+                if int(result.get("errors", 0) or 0) == 0:
+                    if outage_alerted and C.setting("monitor_recovery_notifications", "1") == "1":
+                        core.notify_admins(
+                            "✅ <b>ارتباط مانیتور سرویس‌ها با پنل دوباره برقرار شد.</b>",
+                            parse_mode="HTML",
+                        )
+                    consecutive_errors = 0
+                    outage_alerted = False
+                else:
+                    consecutive_errors += 1
+            else:
+                core._detect_expired_trials_for_followup()
+                consecutive_errors = 0
+                outage_alerted = False
+
+            core.process_due_trial_followups()
+        except Exception as exc:
+            consecutive_errors += 1
+            now = int(time.time())
+            threshold = _setting_int("monitor_alert_after_failures", 3, 1, 100)
+            cooldown = _setting_int("monitor_alert_cooldown_seconds", 21600, 300, 604800)
+            if consecutive_errors >= threshold and (
+                last_alert_at == 0 or now - last_alert_at >= cooldown
+            ):
+                summary = _monitor_error_summary(exc)
+                try:
+                    core.notify_admins(
+                        "⚠️ <b>اختلال ارتباط مانیتور سرویس‌ها با پنل</b>\n"
+                        "━━━━━━━━━━━━━━━━\n"
+                        f"تعداد خطای متوالی: <b>{consecutive_errors}</b>\n"
+                        f"<code>{escape(summary)}</code>\n\n"
+                        "این هشدار تا پایان بازه cooldown دوباره ارسال نمی‌شود.",
+                        parse_mode="HTML",
+                    )
+                    last_alert_at = now
+                    outage_alerted = True
+                except Exception:
+                    pass
+
+        time.sleep(core.get_service_notification_interval())
+
+
 def apply():
     core = C.CORE
-    C.ORIGINALS.update({
-        "purchase_gate": core.purchase_gate,
-        "checkout": core._create_checkout_transaction,
-        "trial_enabled": core.trial_enabled,
-        "trial_generator": core.generate_trial_xui_config,
-        "notify_admins": core.notify_admins,
-        "delivery_links": core._get_delivery_links,
-        "configured_inbounds": core._configured_inbound_ids,
-        "set_inbound_toggle": core._set_inbound_toggle,
-        "sync_client_inbounds": core._sync_client_inbounds,
-    })
+    C.ORIGINALS.update(
+        {
+            "purchase_gate": core.purchase_gate,
+            "checkout": core._create_checkout_transaction,
+            "trial_enabled": core.trial_enabled,
+            "trial_generator": core.generate_trial_xui_config,
+            "notify_admins": core.notify_admins,
+            "delivery_links": core._get_delivery_links,
+            "configured_inbounds": core._configured_inbound_ids,
+            "set_inbound_toggle": core._set_inbound_toggle,
+            "sync_client_inbounds": core._sync_client_inbounds,
+            "service_monitor_loop": core._service_monitor_loop,
+        }
+    )
 
     def purchase_gate(uid):
         blocked, reason = C.blocked(uid)
@@ -139,7 +229,6 @@ def apply():
         return out
 
     def configured_inbounds(scope, plan_id=None):
-        """Expose the effective set to UIs: legacy empty rows mean ALL active."""
         raw = C.ORIGINALS["configured_inbounds"](scope, plan_id)
         if raw:
             return raw
@@ -149,7 +238,6 @@ def apply():
         ]
 
     def set_inbound_toggle(scope, inbound_id, plan_id=None):
-        """Make a click mean what the checkbox says, including default ALL mode."""
         active = [
             int(x)
             for x in core._get_active_inbound_ids(core._xui_headers(), core._xui_proxies())
@@ -180,7 +268,6 @@ def apply():
         return selected
 
     def sync_client_inbounds(email, desired_ids):
-        """Attach/detach on 3x-ui and verify the panel persisted the exact set."""
         result = C.ORIGINALS["sync_client_inbounds"](email, desired_ids)
         expected = {int(x) for x in (desired_ids or [])}
         actual = set()
@@ -197,18 +284,11 @@ def apply():
         )
 
     def delivery_links(user_email, sub_id, headers, request_proxies):
-        """Prefer the real public subscription body for direct configs.
-
-        This makes the manually delivered links match what a customer's
-        subscription client actually receives, including public/managed hosts.
-        The panel API links remain a fallback when the subscription endpoint is
-        temporarily unreachable from the bot server.
-        """
         if sub_id:
             try:
                 response = core.requests.get(
                     core._subscription_url(sub_id),
-                    headers={"Accept": "text/plain", "User-Agent": "SpeedyBot/4.0.1"},
+                    headers={"Accept": "text/plain", "User-Agent": "SpeedyBot/4.2.0"},
                     proxies=request_proxies,
                     timeout=15,
                     verify=not core.DEVELOPMENT_MODE,
@@ -230,5 +310,6 @@ def apply():
     core._set_inbound_toggle = set_inbound_toggle
     core._sync_client_inbounds = sync_client_inbounds
     core._get_delivery_links = delivery_links
+    core._service_monitor_loop = lambda: _service_monitor_loop(core)
     core.main_menu = ui.main_menu
     core.admin_main_menu = ui.admin_menu
