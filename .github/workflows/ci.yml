@@ -36,5 +36,5 @@ jobs:
           test ! -e speedybot_v4
       - name: Version file
         run: |
-          test "$(cat VERSION.txt)" = "4.0.2"
-          python -c 'import speedybot; assert speedybot.VERSION == "4.0.2"'
+          test "$(cat VERSION.txt)" = "4.1.0"
+          python -c 'import speedybot; assert speedybot.VERSION == "4.1.0"'
