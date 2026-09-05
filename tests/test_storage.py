@@ -4,7 +4,7 @@ import sqlite3
 import tempfile
 import unittest
 
-from speedybot import context as C, corepatch, storage
+from speedybot import context as C, corepatch, linked_services, storage, updates
 
 
 class FakeTypes:
@@ -67,9 +67,13 @@ class StorageTests(unittest.TestCase):
         con.execute("CREATE TABLE users(id INTEGER PRIMARY KEY,is_active INTEGER,balance INTEGER)")
         con.execute("CREATE TABLE transactions(id INTEGER PRIMARY KEY,user_id INTEGER,plan_id INTEGER,status TEXT,kind TEXT)")
         con.execute("CREATE TABLE trial_services(user_id INTEGER,status TEXT)")
+        con.execute(
+            "CREATE TABLE linked_services(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,email TEXT NOT NULL UNIQUE,linked_at INTEGER NOT NULL,source TEXT,approved_by INTEGER)"
+        )
         con.executemany("INSERT INTO users(id,is_active,balance) VALUES (?,?,0)", [(10, 1), (20, 1), (30, 1)])
         con.execute("INSERT INTO transactions(id,user_id,plan_id,status,kind) VALUES (1,10,1,'APPROVED','NEW')")
         con.execute("INSERT INTO trial_services(user_id,status) VALUES (20,'EXPIRED')")
+        con.execute("INSERT INTO linked_services(user_id,email,linked_at,source) VALUES (10,'legacy@example.com',1,'CLAIM')")
         con.commit()
         con.close()
         C.configure(FakeCore())
@@ -99,6 +103,12 @@ class StorageTests(unittest.TestCase):
             self.assertTrue(C.menu_visible(key), key)
         C.set_setting("menu_feedback_visible", "0")
         self.assertFalse(C.menu_visible("feedback"))
+
+    def test_monitor_and_update_defaults_are_seeded(self):
+        self.assertEqual(C.setting("monitor_alert_after_failures", ""), "3")
+        self.assertEqual(C.setting("monitor_alert_cooldown_seconds", ""), "21600")
+        self.assertEqual(C.setting("update_notifications_enabled", ""), "1")
+        self.assertEqual(C.setting("update_check_interval_seconds", ""), "21600")
 
     def test_legacy_default_copy_is_white_labeled_on_upgrade(self):
         legacy_welcome = "سلام به ربات فروش خودکار **SpeedPing** خوش آمدید! 🚀\nاز منوی زیر اقدام به خرید یا مدیریت حساب خود کنید."
@@ -151,6 +161,24 @@ class StorageTests(unittest.TestCase):
         text = storage.feedback_text()
         self.assertIn("5.00/5", text)
         self.assertIn("great", text)
+
+    def test_linked_service_ownership_lookup(self):
+        row = linked_services._owned_linked_service(10, 1)
+        self.assertEqual(row["email"], "legacy@example.com")
+        self.assertIsNone(linked_services._owned_linked_service(20, 1))
+
+    def test_update_version_comparison(self):
+        self.assertTrue(updates.is_newer("4.1.1", "4.1.0"))
+        self.assertTrue(updates.is_newer("5.0.0", "4.9.9"))
+        self.assertFalse(updates.is_newer("4.1.0", "4.1.0"))
+        self.assertFalse(updates.is_newer("not-a-version", "4.1.0"))
+
+    def test_monitor_dns_error_is_summarized(self):
+        text = corepatch._monitor_error_summary(
+            Exception("NameResolutionError: Temporary failure in name resolution")
+        )
+        self.assertIn("DNS", text)
+        self.assertIn("Resolve", text)
 
     def test_subscription_direct_links_plain_and_base64(self):
         raw = "vless://one\nvmess://two\nhttps://subscription.example/sub/x"
