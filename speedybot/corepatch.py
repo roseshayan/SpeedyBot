@@ -288,7 +288,7 @@ def apply():
             try:
                 response = core.requests.get(
                     core._subscription_url(sub_id),
-                    headers={"Accept": "text/plain", "User-Agent": "SpeedyBot/4.1.0"},
+                    headers={"Accept": "text/plain", "User-Agent": "SpeedyBot/4.2.0"},
                     proxies=request_proxies,
                     timeout=15,
                     verify=not core.DEVELOPMENT_MODE,
