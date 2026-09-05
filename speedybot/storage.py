@@ -30,6 +30,16 @@ def init_db():
         "operating_mode": "NORMAL",
         "sales_paused_message": "🛒 فروش و تمدید موقتاً متوقف شده است. حساب کاربری، راهنما و پشتیبانی همچنان در دسترس هستند.",
         "maintenance_message": "🛠 سرویس موقتاً در حال نگهداری است. حساب کاربری، راهنما و پشتیبانی همچنان در دسترس هستند.",
+        "brand_name": "فروشگاه",
+        "menu_buy_visible": "1",
+        "menu_account_visible": "1",
+        "menu_trial_visible": "1",
+        "menu_affiliate_visible": "1",
+        "menu_guide_visible": "1",
+        "menu_faq_visible": "1",
+        "menu_rewards_visible": "1",
+        "menu_feedback_visible": "1",
+        "menu_support_visible": "1",
         "feedback_enabled": "1",
         "plan_categories_enabled": "1",
         "trial_overrides_enabled": "1",
@@ -54,6 +64,16 @@ def init_db():
     }
     for k, v in defaults.items():
         c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES (?,?)", (k, v))
+
+    # Only rewrite untouched legacy defaults. Custom texts written by an admin
+    # are deliberately preserved during upgrades.
+    legacy_welcome = "سلام به ربات فروش خودکار **SpeedPing** خوش آمدید! 🚀\nاز منوی زیر اقدام به خرید یا مدیریت حساب خود کنید."
+    neutral_welcome = "سلام به **فروشگاه** خوش آمدید! 🚀\nاز منوی زیر اقدام به خرید یا مدیریت حساب خود کنید."
+    legacy_faq = "📚 **راهنمای SpeedPing**\n\n• برای خرید از بخش پلان‌ها استفاده کنید.\n• لینک Subscription را همیشه نگه دارید و برای به‌روزرسانی کانفیگ‌ها Refresh کنید.\n• برای تمدید یا خرید حجم اضافه وارد حساب کاربری شوید.\n• در صورت مشکل از بخش پشتیبانی پیام بدهید."
+    neutral_faq = "📚 **راهنمای فروشگاه**\n\n• برای خرید از بخش پلان‌ها استفاده کنید.\n• لینک Subscription را همیشه نگه دارید و برای به‌روزرسانی کانفیگ‌ها Refresh کنید.\n• برای تمدید یا خرید حجم اضافه وارد حساب کاربری شوید.\n• در صورت مشکل از بخش پشتیبانی پیام بدهید."
+    c.execute("UPDATE settings SET value=? WHERE key='welcome_text' AND value=?", (neutral_welcome, legacy_welcome))
+    c.execute("UPDATE settings SET value=? WHERE key='faq_text' AND value=?", (neutral_faq, legacy_faq))
+
     c.commit()
     c.close()
 
