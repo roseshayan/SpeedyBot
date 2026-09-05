@@ -82,23 +82,22 @@ def admin_menu():
         ),
         (
             C.inline("🏷 برند و منوی مشتری", callback_data="custom:panel", style_name="primary"),
+        ),
+        (
             C.inline("🎨 ظاهر و دکمه‌ها", callback_data="plus:ui", style_name="primary", emoji_key="admin"),
-        ),
-        (
             C.inline("💳 حساب واریز", callback_data="admin:bank_config"),
+        ),
+        (
             C.inline("📝 متن‌ها و FAQ", callback_data="admin:content"),
-        ),
-        (
             C.inline("👤 غیرفعال‌کردن کاربر", callback_data="admin:delete_user", style_name="danger"),
-            C.inline("🔌 حذف از پنل", callback_data="admin:delete_sub", style_name="danger"),
         ),
         (
+            C.inline("🔌 حذف از پنل", callback_data="admin:delete_sub", style_name="danger"),
             C.inline("↩️ بروزرسانی منو", callback_data="plus:home"),
-            C.inline("✅ تست دکمه", callback_data="plus:noop", style_name="success"),
         ),
     ]
-    for a, b in rows:
-        m.row(a, b)
+    for row in rows:
+        m.row(*row)
     return m
 
 
