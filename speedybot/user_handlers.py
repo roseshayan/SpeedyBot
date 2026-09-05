@@ -32,7 +32,7 @@ def _shop(message):
     if C.setting('plan_categories_enabled','1')!='1': return C.CORE.show_plans(message)
     m,rows=ui.categories_markup()
     if not rows: return C.CORE.show_plans(message)
-    C.BOT.send_message(message.chat.id,f'🛍 <b>فروشگاه {escape(C.brand_name())}</b>\n━━━━━━━━━━━━━━━━\nدسته موردنظر را انتخاب کنید:',parse_mode='HTML',reply_markup=m)
+    C.BOT.send_message(message.chat.id,f'🛍 <b>{escape(C.brand_name())}</b>\n━━━━━━━━━━━━━━━━\nدسته موردنظر را انتخاب کنید:',parse_mode='HTML',reply_markup=m)
 
 
 def _account(message):
@@ -55,7 +55,7 @@ def _account(message):
     for r in linked: m.add(C.inline(f"🔗 {r['email'][:42]}",callback_data=f"view:linked:{r['id']}"))
     m.row(C.inline('🧾 تاریخچه خرید',callback_data='account:purchases'),C.inline('📜 کیف پول',callback_data='ref:wallet_history'))
     if C.CORE.existing_service_link_enabled(): m.add(C.inline('➕ افزودن سرویس قبلی',callback_data='account:link_existing',style_name='success'))
-    if C.CORE.connection_guides_enabled(): m.add(C.inline('📲 راهنمای اتصال',callback_data='guide:menu',style_name='primary',emoji_key='guide'))
+    if C.menu_visible('guide') and C.CORE.connection_guides_enabled(): m.add(C.inline('📲 راهنمای اتصال',callback_data='guide:menu',style_name='primary',emoji_key='guide'))
     if C.menu_visible('feedback') and C.setting('feedback_enabled','1')=='1': m.add(C.inline('⭐ ثبت نظر و امتیاز',callback_data='plus:feedback:user',style_name='primary'))
     C.BOT.send_message(uid,'\n'.join(lines),parse_mode='HTML',reply_markup=m)
 
