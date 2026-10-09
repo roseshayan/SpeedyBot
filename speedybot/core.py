@@ -20,6 +20,13 @@ try:
 except ImportError:
     qrcode = None
 
+<<<<<<< Updated upstream
+=======
+from . import env_manager
+from . import backup_manager
+env_manager.load_env_file()
+
+>>>>>>> Stashed changes
 # --- CONFIGURATIONS (READING FROM SYSTEM ENV) ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
@@ -333,6 +340,7 @@ def init_db():
         'automatic_backup_enabled': '1',
         'automatic_backup_interval_seconds': '86400',
         'automatic_backup_retention': '14',
+        'backup_telegram_send_enabled': '1',
         'last_automatic_backup_at': '0',
         'welcome_text': 'سلام به ربات فروش خودکار **SpeedPing** خوش آمدید! 🚀\nاز منوی زیر اقدام به خرید یا مدیریت حساب خود کنید.',
         'faq_text': '📚 **راهنمای SpeedPing**\n\n• برای خرید از بخش پلان‌ها استفاده کنید.\n• لینک Subscription را همیشه نگه دارید و برای به‌روزرسانی کانفیگ‌ها Refresh کنید.\n• برای تمدید یا خرید حجم اضافه وارد حساب کاربری شوید.\n• در صورت مشکل از بخش پشتیبانی پیام بدهید.',
@@ -637,6 +645,41 @@ def create_database_backup(manual=False):
     return str(target)
 
 
+def send_backup_file_to_admins(target_path, is_auto=False):
+    """Send database backup document to all configured bot admins."""
+    admin_ids = get_admin_ids()
+    if not admin_ids or not os.path.isfile(target_path):
+        return 0
+
+    stats = backup_manager.get_database_stats(target_path)
+    size_kb = round(stats.get('size_bytes', 0) / 1024, 1)
+    kind_text = "خودکار (Auto)" if is_auto else "دستی (Manual)"
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    caption = (
+        "💾 <b>نسخه پشتیبان پایگاه داده SQLite</b>\n"
+        "━━━━━━━━━━━━━━━━\n"
+        f"⚙️ نوع نسخه: <b>{kind_text}</b>\n"
+        f"📅 تاریخ: <code>{now_str}</code>\n"
+        f"📦 حجم: <code>{size_kb} KB</code>\n"
+        f"👥 کاربران: <b>{stats.get('users', 0):,}</b>\n"
+        f"🛍 تراکنش‌ها: <b>{stats.get('orders', 0):,}</b>\n"
+        f"📋 پلان‌ها: <b>{stats.get('plans', 0):,}</b>\n"
+        "━━━━━━━━━━━━━━━━\n"
+        "ℹ️ <i>جهت بازیابی، می‌توانید همین فایل را از طریق منوی «بکاپ و عملیات → بازیابی بکاپ» برای ربات ارسال کنید یا با دستور <code>./restore.sh</code> در سرور بازیابی نمایید.</i>"
+    )
+
+    sent = 0
+    for aid in admin_ids:
+        try:
+            with open(target_path, 'rb') as f:
+                bot.send_document(aid, f, caption=caption, parse_mode="HTML")
+            sent += 1
+        except Exception as e:
+            logger.error(f"Failed to send backup document to admin {aid}: {e}")
+    return sent
+
+
 def maybe_automatic_backup():
     if get_db_setting('automatic_backup_enabled', '1') != '1':
         return None
@@ -647,7 +690,13 @@ def maybe_automatic_backup():
         interval, last = 86400, 0
     if int(time.time()) - last < interval:
         return None
-    return create_database_backup()
+    target = create_database_backup(manual=False)
+    if get_db_setting('backup_telegram_send_enabled', '1') == '1':
+        try:
+            send_backup_file_to_admins(target, is_auto=True)
+        except Exception as e:
+            logger.error(f"Failed to send automatic backup to admins: {e}")
+    return target
 
 
 def user_phone_verified(user_id):
@@ -2308,6 +2357,114 @@ def super_admin_panel(message):
         return
     bot.send_message(message.chat.id, "🚀 **به پنل مدیریت ارشد SpeedPing خوش آمدید**\nتنظیمات مورد نظر را انتخاب کنید:", reply_markup=admin_main_menu(), parse_mode="Markdown")
 
+<<<<<<< Updated upstream
+=======
+def _show_admin_bank_config(admin_chat):
+    card_num = get_db_setting('card_number')
+    card_holder = get_db_setting('card_holder')
+    bank_name = get_db_setting('bank_name')
+    card_photo = get_db_setting('card_photo', '').strip()
+    photo_info = "🖼 عکس کارت: <b>تنظیم شده ✅</b>" if card_photo else "🖼 عکس کارت: <b>تنظیم نشده ❌ (فقط ارسال متن)</b>"
+
+    bank_txt = (
+        f"💳 <b>مشخصات فعلی واریز ربات:</b>\n\n"
+        f"🏦 بانک: <b>{escape(bank_name)}</b>\n"
+        f"💳 شماره کارت: <code>{escape(card_num)}</code>\n"
+        f"👤 به نام: <b>{escape(card_holder)}</b>\n\n"
+        f"{photo_info}"
+    )
+    b_markup = types.InlineKeyboardMarkup(row_width=2)
+    b_markup.row(
+        types.InlineKeyboardButton("✏️ شماره کارت", callback_data="admin:edit_card"),
+        types.InlineKeyboardButton("✏️ صاحب حساب", callback_data="admin:edit_holder"),
+    )
+    b_markup.row(
+        types.InlineKeyboardButton("✏️ نام بانک", callback_data="admin:edit_bank"),
+        types.InlineKeyboardButton("🖼 ثبت/تغییر عکس کارت", callback_data="admin:edit_card_image"),
+    )
+    if card_photo:
+        b_markup.row(
+            types.InlineKeyboardButton("👁 مشاهده عکس کارت", callback_data="admin:view_card_image"),
+            types.InlineKeyboardButton("🗑 حذف عکس کارت", callback_data="admin:del_card_image"),
+        )
+    b_markup.add(types.InlineKeyboardButton("↩️ بازگشت به پنل مدیریت", callback_data="plus:home"))
+    bot.send_message(admin_chat, bank_txt, parse_mode="HTML", reply_markup=b_markup)
+
+
+def _show_admin_xui_config(admin_chat):
+    api_url = get_xui_api_url()
+    base_path = get_xui_base_path() or "/"
+    token = get_xui_bearer_token()
+    masked_token = f"{token[:6]}...{token[-4:]}" if len(token) > 10 else ("تنظیم نشده ❌" if not token else "***")
+    sub_url = get_xui_sub_server_url()
+    sub_path = get_xui_sub_path()
+    env_file = env_manager.find_env_file()
+
+    text = (
+        "🌐 <b>تنظیمات پنل سنائی (3x-ui) و دامنه‌ها</b>\n"
+        "━━━━━━━━━━━━━━━━\n"
+        f"🔗 <b>آدرس وب‌سرویس پنل:</b>\n<code>{escape(api_url or 'تنظیم نشده')}</code>\n\n"
+        f"📂 <b>مسیر امن پنل (Base Path):</b>\n<code>{escape(base_path)}</code>\n\n"
+        f"🔑 <b>توکن پنل (Bearer):</b>\n<code>{escape(masked_token)}</code>\n\n"
+        f"🌐 <b>دامنه سرور سابسکریپشن:</b>\n<code>{escape(sub_url or 'تنظیم نشده')}</code>\n\n"
+        f"🛣 <b>مسیر سابسکریپشن:</b>\n<code>{escape(sub_path)}</code>\n\n"
+        f"📁 <b>فایل محیطی (.env):</b>\n<code>{escape(env_file or 'یافت نشد')}</code>\n"
+        "━━━━━━━━━━━━━━━━\n"
+        "💡 با تغییر این مقادیر، هم دیتابیس ربات و هم فایل <code>.env</code> به‌روزرسانی شده و تغییرات بلافاصله روی تمام لینک‌ها و درخواست‌ها اعمال می‌گردد."
+    )
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.row(
+        types.InlineKeyboardButton("✏️ آدرس پنل (API)", callback_data="admin:xui_edit_api_url"),
+        types.InlineKeyboardButton("✏️ مسیر امن پنل", callback_data="admin:xui_edit_base_path"),
+    )
+    markup.row(
+        types.InlineKeyboardButton("✏️ توکن پنل (Token)", callback_data="admin:xui_edit_token"),
+        types.InlineKeyboardButton("✏️ دامنه ساب (Sub URL)", callback_data="admin:xui_edit_sub_url"),
+    )
+    markup.row(
+        types.InlineKeyboardButton("✏️ مسیر ساب (Sub Path)", callback_data="admin:xui_edit_sub_path"),
+        types.InlineKeyboardButton("🔄 تعویض کلی دامنه", callback_data="admin:xui_replace_domain"),
+    )
+    markup.row(
+        types.InlineKeyboardButton("🧪 تست اتصال زنده", callback_data="admin:xui_test"),
+        types.InlineKeyboardButton("↩️ بازگشت به پنل", callback_data="plus:home"),
+    )
+    bot.send_message(admin_chat, text, parse_mode="HTML", reply_markup=markup)
+
+
+def _show_admin_ops_menu(admin_chat):
+    last = int(get_db_setting('last_automatic_backup_at', '0') or 0)
+    last_txt = datetime.fromtimestamp(last).strftime('%Y-%m-%d %H:%M') if last else 'هنوز انجام نشده'
+    auto = get_db_setting('automatic_backup_enabled', '1') == '1'
+    tg_send = get_db_setting('backup_telegram_send_enabled', '1') == '1'
+    retention = get_db_setting('automatic_backup_retention', '14')
+
+    m = types.InlineKeyboardMarkup(row_width=2)
+    m.add(
+        types.InlineKeyboardButton("💾 بکاپ همین الان", callback_data="admin:backup_now"),
+        types.InlineKeyboardButton("📥 بازیابی بکاپ (Restore)", callback_data="admin:backup_restore"),
+    )
+    m.add(
+        types.InlineKeyboardButton(f"بکاپ خودکار: {'🟢 فعال' if auto else '🔴 غیرفعال'}", callback_data="admin:backup_toggle"),
+        types.InlineKeyboardButton(f"ارسال به تلگرام: {'🟢 فعال' if tg_send else '🔴 غیرفعال'}", callback_data="admin:backup_telegram_toggle"),
+    )
+    m.add(
+        types.InlineKeyboardButton("🔄 بروزرسانی منو", callback_data="admin:ops"),
+        types.InlineKeyboardButton("↩️ بازگشت به پنل", callback_data="plus:home"),
+    )
+    text = (
+        "💾 <b>مدیریت نسخه‌های پشتیبان (Backup & Restore)</b>\n"
+        "━━━━━━━━━━━━━━━━\n"
+        f"• وضعیت بکاپ خودکار سرور: <b>{'🟢 فعال' if auto else '🔴 غیرفعال'}</b>\n"
+        f"• ارسال خودکار فایل به تلگرام مدیر: <b>{'🟢 فعال' if tg_send else '🔴 غیرفعال'}</b>\n"
+        f"• آخرین نسخه پشتیبان: <b>{last_txt}</b>\n"
+        f"• نگهداری در سرور (Retention): <b>{retention} نسخه</b>\n\n"
+        "💡 <i>با زدن دکمه «بازیابی بکاپ»، می‌توانید فایل پشتیبان (.db) را به ربات بفرستید تا اطلاعات به طور کامل بازیابی شوند. پیش از اعمال تغییرات، یک نسخه اضطراری از دیتابیس فعلی ذخیره خواهد شد. همچنین می‌توانید با دستور <code>./restore.sh</code> روی سرور اقدام به بازیابی فرمایید.</i>"
+    )
+    bot.send_message(admin_chat, text, parse_mode="HTML", reply_markup=m)
+
+
+>>>>>>> Stashed changes
 @bot.callback_query_handler(func=lambda call: call.data.startswith('admin:'))
 def handle_admin_panel_callbacks(call):
     if not is_admin(call.from_user.id):
@@ -2741,25 +2898,49 @@ def handle_admin_panel_callbacks(call):
         bot.register_next_step_handler(msg, process_admin_remove)
 
     elif action == "ops":
-        last = int(get_db_setting('last_automatic_backup_at','0') or 0)
-        last_txt = datetime.fromtimestamp(last).strftime('%Y-%m-%d %H:%M') if last else 'هنوز انجام نشده'
-        auto = get_db_setting('automatic_backup_enabled','1') == '1'
-        m = types.InlineKeyboardMarkup(row_width=2)
-        m.add(types.InlineKeyboardButton("💾 بکاپ همین الان", callback_data="admin:backup_now"), types.InlineKeyboardButton("⏯ بکاپ خودکار", callback_data="admin:backup_toggle"))
-        bot.send_message(admin_chat, f"💾 **بکاپ و عملیات**\n\nبکاپ خودکار: {'🟢 فعال' if auto else '🔴 غیرفعال'}\nآخرین بکاپ: **{last_txt}**\nRetention: **{get_db_setting('automatic_backup_retention','14')} نسخه**", parse_mode="Markdown", reply_markup=m)
+        _show_admin_ops_menu(admin_chat)
 
     elif action == "backup_now":
-        bot.answer_callback_query(call.id, "در حال بکاپ...")
+        bot.answer_callback_query(call.id, "در حال ایجاد و ارسال نسخه پشتیبان...")
         try:
             path = create_database_backup(manual=True)
-            bot.send_message(admin_chat, f"✅ بکاپ SQLite ساخته شد:\n`{path}`", parse_mode="Markdown")
+            sent = send_backup_file_to_admins(path, is_auto=False)
+            bot.send_message(
+                admin_chat,
+                f"✅ <b>نسخه پشتیبان SQLite با موفقیت ساخته شد:</b>\n<code>{escape(path)}</code>\n\n"
+                f"📤 فایل به تلگرام <b>{sent}</b> مدیر ارسال گردید.",
+                parse_mode="HTML"
+            )
         except Exception as e:
-            bot.send_message(admin_chat, f"❌ بکاپ خطا داد: `{str(e)[:500]}`", parse_mode="Markdown")
+            bot.send_message(admin_chat, f"❌ بکاپ خطا داد: <code>{escape(str(e)[:500])}</code>", parse_mode="HTML")
 
     elif action == "backup_toggle":
-        new = '0' if get_db_setting('automatic_backup_enabled','1') == '1' else '1'
+        new = '0' if get_db_setting('automatic_backup_enabled', '1') == '1' else '1'
         update_db_setting('automatic_backup_enabled', new)
-        bot.answer_callback_query(call.id, "تغییر کرد ✅")
+        bot.answer_callback_query(call.id, "وضعیت بکاپ خودکار تغییر کرد ✅")
+        _show_admin_ops_menu(admin_chat)
+
+    elif action == "backup_telegram_toggle":
+        new = '0' if get_db_setting('backup_telegram_send_enabled', '1') == '1' else '1'
+        update_db_setting('backup_telegram_send_enabled', new)
+        bot.answer_callback_query(call.id, "وضعیت ارسال به تلگرام تغییر کرد ✅")
+        _show_admin_ops_menu(admin_chat)
+
+    elif action == "backup_restore":
+        bot.answer_callback_query(call.id)
+        msg = bot.send_message(
+            admin_chat,
+            "📥 <b>بازیابی پایگاه داده از فایل بکاپ (Restore)</b>\n"
+            "━━━━━━━━━━━━━━━━\n"
+            "لطفاً فایل پشتیبان (با پسوند <code>.db</code> یا <code>.sqlite</code>) را به صورت <b>فایل / Document</b> در همین چت ارسال نمایید.\n\n"
+            "⚠️ <b>نکات بسیار مهم:</b>\n"
+            "۱. قبل از شروع بازیابی، یک نسخه پشتیبان اضطراری از دیتابیس فعلی در مسیر <code>backups/pre-restore/</code> ذخیره خواهد شد.\n"
+            "۲. سلامت دیتابیس و جداول اصلی ربات بررسی خواهد شد.\n"
+            "۳. برای لغو عملیات روی دکمه بازگشت زیر بزنید.",
+            parse_mode="HTML",
+            reply_markup=back_menu()
+        )
+        bot.register_next_step_handler(msg, process_admin_backup_restore)
 
     elif action == "content":
         m = types.InlineKeyboardMarkup(row_width=1)
@@ -3359,6 +3540,229 @@ def process_edit_bank(message, field_type):
         update_db_setting('bank_name', message.text.strip())
     bot.send_message(message.chat.id, "✅ مشخصات بانکی با موفقیت به‌روزرسانی شد.")
 
+<<<<<<< Updated upstream
+=======
+
+def process_edit_card_image(message):
+    raw_text = (message.text or "").strip()
+    if raw_text == "🔙 بازگشت به منوی اصلی":
+        bot.send_message(message.chat.id, "عملیات لغو شد.", reply_markup=main_menu())
+        return
+
+    photo_id = None
+    if getattr(message, 'photo', None):
+        photo_id = message.photo[-1].file_id
+    elif getattr(message, 'document', None) and getattr(message.document, 'mime_type', '').startswith('image/'):
+        photo_id = message.document.file_id
+
+    if not photo_id:
+        bot.send_message(
+            message.chat.id,
+            "❌ هیچ تصویری دریافت نشد. لطفاً یک عکس ارسال کنید یا از منوی پایین بازگشت را بزنید.",
+            reply_markup=back_menu()
+        )
+        bot.register_next_step_handler(message, process_edit_card_image)
+        return
+
+    update_db_setting('card_photo', photo_id)
+    bot.send_message(
+        message.chat.id,
+        "✅ تصویر کارت بانکی با موفقیت ثبت شد. از این پس این تصویر به همراه مشخصات کارت برای مشتری ارسال خواهد شد.",
+        reply_markup=main_menu()
+    )
+
+
+def process_edit_xui_api_url(message):
+    raw = (message.text or "").strip()
+    if raw == "🔙 بازگشت به منوی اصلی":
+        bot.send_message(message.chat.id, "عملیات لغو شد.", reply_markup=main_menu())
+        return
+    if not (raw.startswith("http://") or raw.startswith("https://")):
+        bot.send_message(message.chat.id, "❌ آدرس پنل باید با http:// یا https:// شروع شود.\nمثال: `https://panel.speed-ping.shop:2053`", parse_mode="Markdown")
+        return
+    update_xui_config('xui_api_url', raw)
+    bot.send_message(message.chat.id, f"✅ آدرس وب‌سرویس پنل با موفقیت به‌روزرسانی شد:\n`{raw}`\n(در دیتابیس و فایل .env ذخیره شد)", parse_mode="Markdown", reply_markup=main_menu())
+
+
+def process_edit_xui_base_path(message):
+    raw = (message.text or "").strip()
+    if raw == "🔙 بازگشت به منوی اصلی":
+        bot.send_message(message.chat.id, "عملیات لغو شد.", reply_markup=main_menu())
+        return
+    update_xui_config('xui_base_path', raw)
+    bot.send_message(message.chat.id, f"✅ مسیر امن پنل با موفقیت به‌روزرسانی شد:\n`{raw}`", parse_mode="Markdown", reply_markup=main_menu())
+
+
+def process_edit_xui_token(message):
+    raw = (message.text or "").strip()
+    if raw == "🔙 بازگشت به منوی اصلی":
+        bot.send_message(message.chat.id, "عملیات لغو شد.", reply_markup=main_menu())
+        return
+    if len(raw) < 10:
+        bot.send_message(message.chat.id, "❌ توکن وارد شده نامعتبر است (طول توکن بسیار کوتاه است).")
+        return
+    update_xui_config('xui_bearer_token', raw)
+    bot.send_message(message.chat.id, "✅ توکن دسترسی به پنل سنائی با موفقیت به‌روزرسانی شد.", reply_markup=main_menu())
+
+
+def process_edit_xui_sub_url(message):
+    raw = (message.text or "").strip()
+    if raw == "🔙 بازگشت به منوی اصلی":
+        bot.send_message(message.chat.id, "عملیات لغو شد.", reply_markup=main_menu())
+        return
+    if not (raw.startswith("http://") or raw.startswith("https://")):
+        bot.send_message(message.chat.id, "❌ آدرس سرور سابسکریپشن باید با http:// یا https:// شروع شود.\nمثال: `https://sub.speed-ping.shop:2096`", parse_mode="Markdown")
+        return
+    update_xui_config('xui_sub_server_url', raw)
+    bot.send_message(message.chat.id, f"✅ دامنه سابسکریپشن با موفقیت به‌روزرسانی شد:\n`{raw}`\n(تمامی لینک‌های ساب مشتریان از این پس با این دامنه ساخته می‌شوند)", parse_mode="Markdown", reply_markup=main_menu())
+
+
+def process_edit_xui_sub_path(message):
+    raw = (message.text or "").strip()
+    if raw == "🔙 بازگشت به منوی اصلی":
+        bot.send_message(message.chat.id, "عملیات لغو شد.", reply_markup=main_menu())
+        return
+    update_xui_config('xui_sub_path', raw)
+    bot.send_message(message.chat.id, f"✅ مسیر سابسکریپشن با موفقیت به‌روزرسانی شد:\n`{raw}`", parse_mode="Markdown", reply_markup=main_menu())
+
+
+def process_xui_replace_domain(message):
+    raw = (message.text or "").strip()
+    if raw == "🔙 بازگشت به منوی اصلی":
+        bot.send_message(message.chat.id, "عملیات لغو شد.", reply_markup=main_menu())
+        return
+    parts = [p.strip() for p in raw.split("|") if p.strip()]
+    if len(parts) != 2:
+        bot.send_message(message.chat.id, "❌ لطفاً دامنه قبلی و جدید را با علامت | جدا کنید.\nمثال:\n`speed-ping.com | speed-ping.shop`", parse_mode="Markdown")
+        return
+    old_domain, new_domain = parts[0], parts[1]
+    ok, msg = replace_domain_in_all_configs(old_domain, new_domain)
+    if ok:
+        bot.send_message(message.chat.id, f"✅ {msg}", reply_markup=main_menu())
+    else:
+        bot.send_message(message.chat.id, f"❌ {msg}", reply_markup=main_menu())
+
+
+def process_admin_backup_restore(message):
+    admin_chat = message.chat.id
+    if not is_admin(message.from_user.id):
+        return
+
+    raw_text = (message.text or "").strip()
+    if raw_text in ("🔙 بازگشت به منوی اصلی", "لغو", "/cancel"):
+        bot.send_message(admin_chat, "عملیات بازیابی لغو شد.", reply_markup=main_menu())
+        return
+
+    if not message.document:
+        bot.send_message(
+            admin_chat,
+            "⚠️ لطفاً فایل پشتیبان دیتابیس را به عنوان <b>سند (Document / File)</b> ارسال نمایید.\n"
+            "یا از دکمه‌های زیر جهت لغو استفاده کنید.",
+            parse_mode="HTML",
+            reply_markup=back_menu()
+        )
+        bot.register_next_step_handler(message, process_admin_backup_restore)
+        return
+
+    doc = message.document
+    fname = (doc.file_name or "").lower()
+    if not (fname.endswith('.db') or fname.endswith('.sqlite') or fname.endswith('.sqlite3') or fname.endswith('.bak')):
+        bot.send_message(
+            admin_chat,
+            "⚠️ پسوند فایل نامعتبر است. فایل باید دارای پسوند <code>.db</code> یا <code>.sqlite</code> باشد.\n"
+            "لطفاً مجدداً فایل صحیح را ارسال فرمایید:",
+            parse_mode="HTML",
+            reply_markup=back_menu()
+        )
+        bot.register_next_step_handler(message, process_admin_backup_restore)
+        return
+
+    if doc.file_size > 50 * 1024 * 1024:
+        bot.send_message(
+            admin_chat,
+            "❌ حجم فایل ارسالی بیش از ۵۰ مگابایت است و از طریق تلگرام قابل دانلود نیست.\n"
+            "لطفاً با انتقال فایل به سرور، از طریق دستور <code>./restore.sh</code> روی سرور اقدام به بازیابی فرمایید.",
+            parse_mode="HTML",
+            reply_markup=main_menu()
+        )
+        return
+
+    status_msg = bot.send_message(admin_chat, "⏳ در حال دانلود و اعتبارسنجی فایل پشتیبان...")
+    temp_dir = Path("backups") / "restore_temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_file = temp_dir / f"uploaded-{int(time.time())}.db"
+
+    try:
+        file_info = bot.get_file(doc.file_id)
+        downloaded = bot.download_file(file_info.file_path)
+        with open(temp_file, "wb") as f:
+            f.write(downloaded)
+
+        valid, val_msg, stats = backup_manager.validate_database_file(str(temp_file))
+        if not valid:
+            bot.edit_message_text(
+                f"❌ <b>فایل ارسالی نامعتبر است:</b>\n{escape(val_msg)}\n\nعملیات لغو شد و هیچ تغییری در داده‌های فعلی ایجاد نگردید.",
+                admin_chat,
+                status_msg.message_id,
+                parse_mode="HTML"
+            )
+            return
+
+        success, res_msg, stats, safety_path = backup_manager.restore_database_from_file(
+            str(temp_file),
+            target_db="speedping.db",
+            pre_restore_backup=True
+        )
+
+        if success:
+            try:
+                init_db()
+                from . import storage as st
+                st.init_db()
+                env_path = env_manager.find_env_file()
+                if os.path.isfile(env_path):
+                    env_manager.load_env_file(env_path)
+            except Exception:
+                pass
+
+            safety_note = f"\n\n🛡 <i>نسخه پشتیبان قبل از بازیابی در مسیر زیر ذخیره شد:</i>\n<code>{escape(safety_path)}</code>" if safety_path else ""
+            bot.edit_message_text(
+                "✅ <b>بازیابی پایگاه داده با موفقیت انجام شد!</b>\n"
+                "━━━━━━━━━━━━━━━━\n"
+                f"👥 کاربران بازیابی‌شده: <b>{stats.get('users', 0):,}</b>\n"
+                f"🛍 تراکنش‌ها و سفارشات: <b>{stats.get('orders', 0):,}</b>\n"
+                f"📦 پلان‌ها: <b>{stats.get('plans', 0):,}</b>\n"
+                f"⚙️ تنظیمات: <b>{stats.get('settings', 0):,}</b>\n"
+                "━━━━━━━━━━━━━━━━"
+                f"{safety_note}",
+                admin_chat,
+                status_msg.message_id,
+                parse_mode="HTML"
+            )
+            _show_admin_ops_menu(admin_chat)
+        else:
+            bot.edit_message_text(
+                f"❌ <b>خطا در حین بازیابی:</b>\n{escape(res_msg)}",
+                admin_chat,
+                status_msg.message_id,
+                parse_mode="HTML"
+            )
+    except Exception as exc:
+        bot.edit_message_text(
+            f"❌ خطای غیرمنتظره در پردازش فایل: <code>{escape(str(exc)[:400])}</code>",
+            admin_chat,
+            status_msg.message_id,
+            parse_mode="HTML"
+        )
+    finally:
+        try:
+            if temp_file.exists():
+                temp_file.unlink()
+        except Exception:
+            pass
+
+
+>>>>>>> Stashed changes
 def process_delete_bot_user(message):
     try:
         target_id = int(message.text.strip())

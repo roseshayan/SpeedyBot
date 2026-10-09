@@ -19,13 +19,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Python syntax
-        run: python -m py_compile main.py speedybot/*.py
+        run: python -m py_compile main.py restore.py speedybot/*.py
       - name: Unit tests
         run: python -m unittest discover -s tests -v
       - name: Shell syntax
         run: |
           bash -n install.sh
           bash -n update.sh
+          bash -n restore.sh
       - name: Integrated layout
         run: |
           test -f main.py
