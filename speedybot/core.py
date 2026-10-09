@@ -14,11 +14,15 @@ from io import BytesIO
 from pathlib import Path
 from urllib.parse import quote
 from datetime import datetime
+from html import escape
 
 try:
     import qrcode
 except ImportError:
     qrcode = None
+
+from . import env_manager
+env_manager.load_env_file()
 
 # --- CONFIGURATIONS (READING FROM SYSTEM ENV) ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -334,6 +338,12 @@ def init_db():
         'automatic_backup_interval_seconds': '86400',
         'automatic_backup_retention': '14',
         'last_automatic_backup_at': '0',
+        'card_photo': '',
+        'xui_api_url': XUI_API_URL or '',
+        'xui_base_path': XUI_BASE_PATH or '',
+        'xui_bearer_token': XUI_BEARER_TOKEN or '',
+        'xui_sub_server_url': XUI_SUB_SERVER_URL or '',
+        'xui_sub_path': XUI_SUB_PATH or '/sub/',
         'welcome_text': 'سلام به ربات فروش خودکار **SpeedPing** خوش آمدید! 🚀\nاز منوی زیر اقدام به خرید یا مدیریت حساب خود کنید.',
         'faq_text': '📚 **راهنمای SpeedPing**\n\n• برای خرید از بخش پلان‌ها استفاده کنید.\n• لینک Subscription را همیشه نگه دارید و برای به‌روزرسانی کانفیگ‌ها Refresh کنید.\n• برای تمدید یا خرید حجم اضافه وارد حساب کاربری شوید.\n• در صورت مشکل از بخش پشتیبانی پیام بدهید.',
     }
@@ -374,6 +384,124 @@ def update_db_setting(key, value):
     cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
     conn.commit()
     conn.close()
+
+def get_xui_api_url():
+    val = get_db_setting('xui_api_url', '').strip()
+    return val or (XUI_API_URL or "").strip()
+
+def get_xui_base_path():
+    val = get_db_setting('xui_base_path', '').strip()
+    if val:
+        return val
+    return (XUI_BASE_PATH or "").strip()
+
+def get_xui_bearer_token():
+    val = get_db_setting('xui_bearer_token', '').strip()
+    return val or (XUI_BEARER_TOKEN or "").strip()
+
+def get_xui_sub_server_url():
+    val = get_db_setting('xui_sub_server_url', '').strip()
+    return val or (XUI_SUB_SERVER_URL or "").strip()
+
+def get_xui_sub_path():
+    val = get_db_setting('xui_sub_path', '').strip()
+    return val or (XUI_SUB_PATH or "/sub/").strip()
+
+def update_xui_config(key, value):
+    """Update XUI configuration in database, runtime memory, and .env file."""
+    global XUI_API_URL, XUI_BASE_PATH, XUI_BEARER_TOKEN, XUI_SUB_SERVER_URL, XUI_SUB_PATH
+    key_lower = key.lower().strip()
+    val = str(value).strip()
+
+    env_map = {
+        'xui_api_url': 'XUI_API_URL',
+        'xui_base_path': 'XUI_BASE_PATH',
+        'xui_bearer_token': 'XUI_BEARER_TOKEN',
+        'xui_sub_server_url': 'XUI_SUB_SERVER_URL',
+        'xui_sub_path': 'XUI_SUB_PATH',
+    }
+    env_key = env_map.get(key_lower)
+    if not env_key:
+        return False
+
+    if key_lower in ('xui_api_url', 'xui_sub_server_url'):
+        val = val.rstrip('/')
+    elif key_lower == 'xui_base_path':
+        if val and not val.startswith('/'):
+            val = '/' + val
+        if val != '/' and val.endswith('/'):
+            val = val.rstrip('/')
+    elif key_lower == 'xui_sub_path':
+        if not val:
+            val = '/sub/'
+        if not val.startswith('/'):
+            val = '/' + val
+        if not val.endswith('/'):
+            val = val + '/'
+
+    update_db_setting(key_lower, val)
+    os.environ[env_key] = val
+    if env_key == 'XUI_API_URL':
+        XUI_API_URL = val
+    elif env_key == 'XUI_BASE_PATH':
+        XUI_BASE_PATH = val
+    elif env_key == 'XUI_BEARER_TOKEN':
+        XUI_BEARER_TOKEN = val
+    elif env_key == 'XUI_SUB_SERVER_URL':
+        XUI_SUB_SERVER_URL = val
+    elif env_key == 'XUI_SUB_PATH':
+        XUI_SUB_PATH = val
+
+    try:
+        env_manager.update_env_file({env_key: val})
+    except Exception:
+        pass
+    return True
+
+def replace_domain_in_all_configs(old_domain, new_domain):
+    """Replace domain string across DB settings and .env."""
+    old_domain = old_domain.strip().rstrip('/')
+    new_domain = new_domain.strip().rstrip('/')
+    if not old_domain or not new_domain or old_domain == new_domain:
+        return False, "دامنه‌های وارد شده یکسان یا نامعتبر هستند."
+
+    changes = []
+    settings_to_check = [
+        'xui_api_url',
+        'xui_sub_server_url',
+        'welcome_text',
+        'faq_text',
+        'required_channel_url',
+    ]
+    for skey in settings_to_check:
+        val = get_db_setting(skey, '')
+        if not val:
+            if skey == 'xui_api_url': val = XUI_API_URL or ''
+            elif skey == 'xui_sub_server_url': val = XUI_SUB_SERVER_URL or ''
+
+        if old_domain in val:
+            new_val = val.replace(old_domain, new_domain)
+            if skey in ('xui_api_url', 'xui_sub_server_url'):
+                update_xui_config(skey, new_val)
+            else:
+                update_db_setting(skey, new_val)
+            changes.append(skey)
+
+    try:
+        env_path = env_manager.find_env_file()
+        if os.path.isfile(env_path):
+            with open(env_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            if old_domain in content:
+                new_content = content.replace(old_domain, new_domain)
+                with open(env_path, 'w', encoding='utf-8') as f:
+                    f.write(new_content)
+                changes.append('.env')
+                env_manager.load_env_file(env_path)
+    except Exception:
+        pass
+
+    return True, f"دامنه با موفقیت جایگزین شد. بخش‌های به‌روزرسانی‌شده: {', '.join(changes) if changes else 'تنظیمات با دامنه جدید همگام بودند'}"
 
 def _db_connect():
     conn = sqlite3.connect('speedping.db', timeout=15)
@@ -1640,15 +1768,33 @@ def _start_card_checkout(chat_id, user_id, plan, kind='NEW', target_service_emai
     card_num = get_db_setting('card_number')
     card_holder = get_db_setting('card_holder')
     bank_name = get_db_setting('bank_name')
+    card_photo = get_db_setting('card_photo', '').strip()
     discount_line = f"\n🎟 تخفیف اعمال‌شده: **{result['discount']:,} تومان**" if result['discount'] else ""
-    msg = bot.send_message(
-        chat_id,
+    caption_text = (
         f"💵 **{result['name']}**\n\n"
         f"💳 مبلغ قابل پرداخت: **{result['price']:,} تومان**{discount_line}\n\n"
         f"🏦 بانک: *{bank_name}*\n💳 شماره کارت:\n`{card_num}`\n👤 به نام: *{card_holder}*\n\n"
-        f"🆔 تراکنش: `{result['tx_id']}`\n📸 پس از واریز، فقط عکس فیش را ارسال کنید.",
-        parse_mode="Markdown", reply_markup=back_menu()
+        f"🆔 تراکنش: `{result['tx_id']}`\n📸 پس از واریز، فقط عکس فیش را ارسال کنید."
     )
+    msg = None
+    if card_photo:
+        try:
+            msg = bot.send_photo(
+                chat_id,
+                card_photo,
+                caption=caption_text,
+                parse_mode="Markdown",
+                reply_markup=back_menu()
+            )
+        except Exception:
+            msg = None
+    if not msg:
+        msg = bot.send_message(
+            chat_id,
+            caption_text,
+            parse_mode="Markdown",
+            reply_markup=back_menu()
+        )
     bot.register_next_step_handler(msg, process_receipt, result['tx_id'])
 
 
@@ -1955,7 +2101,7 @@ def handle_view_trial_status(call):
 
 def send_xui_status(user_id, user_email, service_tx_id=None):
     
-    headers = {"Authorization": f"Bearer {XUI_BEARER_TOKEN}", "Content-Type": "application/json"}
+    headers = _xui_headers()
     request_proxies = {'http': 'http://127.0.0.1:10808', 'https': 'http://127.0.0.1:10808'} if DEVELOPMENT_MODE else None
     
     try:
@@ -2028,7 +2174,7 @@ def handle_account_get_links(call):
     mode = call.data.split(':')[1]
     param = call.data.split(':')[2]
     user_id = call.message.chat.id
-    headers = {"Authorization": f"Bearer {XUI_BEARER_TOKEN}", "Content-Type": "application/json"}
+    headers = _xui_headers()
     request_proxies = {'http': 'http://127.0.0.1:10808', 'https': 'http://127.0.0.1:10808'} if DEVELOPMENT_MODE else None
     
     if mode == "sub":
@@ -2308,6 +2454,79 @@ def super_admin_panel(message):
         return
     bot.send_message(message.chat.id, "🚀 **به پنل مدیریت ارشد SpeedPing خوش آمدید**\nتنظیمات مورد نظر را انتخاب کنید:", reply_markup=admin_main_menu(), parse_mode="Markdown")
 
+def _show_admin_bank_config(admin_chat):
+    card_num = get_db_setting('card_number')
+    card_holder = get_db_setting('card_holder')
+    bank_name = get_db_setting('bank_name')
+    card_photo = get_db_setting('card_photo', '').strip()
+    photo_info = "🖼 عکس کارت: <b>تنظیم شده ✅</b>" if card_photo else "🖼 عکس کارت: <b>تنظیم نشده ❌ (فقط ارسال متن)</b>"
+
+    bank_txt = (
+        f"💳 <b>مشخصات فعلی واریز ربات:</b>\n\n"
+        f"🏦 بانک: <b>{escape(bank_name)}</b>\n"
+        f"💳 شماره کارت: <code>{escape(card_num)}</code>\n"
+        f"👤 به نام: <b>{escape(card_holder)}</b>\n\n"
+        f"{photo_info}"
+    )
+    b_markup = types.InlineKeyboardMarkup(row_width=2)
+    b_markup.row(
+        types.InlineKeyboardButton("✏️ شماره کارت", callback_data="admin:edit_card"),
+        types.InlineKeyboardButton("✏️ صاحب حساب", callback_data="admin:edit_holder"),
+    )
+    b_markup.row(
+        types.InlineKeyboardButton("✏️ نام بانک", callback_data="admin:edit_bank"),
+        types.InlineKeyboardButton("🖼 ثبت/تغییر عکس کارت", callback_data="admin:edit_card_image"),
+    )
+    if card_photo:
+        b_markup.row(
+            types.InlineKeyboardButton("👁 مشاهده عکس کارت", callback_data="admin:view_card_image"),
+            types.InlineKeyboardButton("🗑 حذف عکس کارت", callback_data="admin:del_card_image"),
+        )
+    b_markup.add(types.InlineKeyboardButton("↩️ بازگشت به پنل مدیریت", callback_data="plus:home"))
+    bot.send_message(admin_chat, bank_txt, parse_mode="HTML", reply_markup=b_markup)
+
+
+def _show_admin_xui_config(admin_chat):
+    api_url = get_xui_api_url()
+    base_path = get_xui_base_path() or "/"
+    token = get_xui_bearer_token()
+    masked_token = f"{token[:6]}...{token[-4:]}" if len(token) > 10 else ("تنظیم نشده ❌" if not token else "***")
+    sub_url = get_xui_sub_server_url()
+    sub_path = get_xui_sub_path()
+    env_file = env_manager.find_env_file()
+
+    text = (
+        "🌐 <b>تنظیمات پنل سنائی (3x-ui) و دامنه‌ها</b>\n"
+        "━━━━━━━━━━━━━━━━\n"
+        f"🔗 <b>آدرس وب‌سرویس پنل:</b>\n<code>{escape(api_url or 'تنظیم نشده')}</code>\n\n"
+        f"📂 <b>مسیر امن پنل (Base Path):</b>\n<code>{escape(base_path)}</code>\n\n"
+        f"🔑 <b>توکن پنل (Bearer):</b>\n<code>{escape(masked_token)}</code>\n\n"
+        f"🌐 <b>دامنه سرور سابسکریپشن:</b>\n<code>{escape(sub_url or 'تنظیم نشده')}</code>\n\n"
+        f"🛣 <b>مسیر سابسکریپشن:</b>\n<code>{escape(sub_path)}</code>\n\n"
+        f"📁 <b>فایل محیطی (.env):</b>\n<code>{escape(env_file or 'یافت نشد')}</code>\n"
+        "━━━━━━━━━━━━━━━━\n"
+        "💡 با تغییر این مقادیر، هم دیتابیس ربات و هم فایل <code>.env</code> به‌روزرسانی شده و تغییرات بلافاصله روی تمام لینک‌ها و درخواست‌ها اعمال می‌گردد."
+    )
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.row(
+        types.InlineKeyboardButton("✏️ آدرس پنل (API)", callback_data="admin:xui_edit_api_url"),
+        types.InlineKeyboardButton("✏️ مسیر امن پنل", callback_data="admin:xui_edit_base_path"),
+    )
+    markup.row(
+        types.InlineKeyboardButton("✏️ توکن پنل (Token)", callback_data="admin:xui_edit_token"),
+        types.InlineKeyboardButton("✏️ دامنه ساب (Sub URL)", callback_data="admin:xui_edit_sub_url"),
+    )
+    markup.row(
+        types.InlineKeyboardButton("✏️ مسیر ساب (Sub Path)", callback_data="admin:xui_edit_sub_path"),
+        types.InlineKeyboardButton("🔄 تعویض کلی دامنه", callback_data="admin:xui_replace_domain"),
+    )
+    markup.row(
+        types.InlineKeyboardButton("🧪 تست اتصال زنده", callback_data="admin:xui_test"),
+        types.InlineKeyboardButton("↩️ بازگشت به پنل", callback_data="plus:home"),
+    )
+    bot.send_message(admin_chat, text, parse_mode="HTML", reply_markup=markup)
+
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith('admin:'))
 def handle_admin_panel_callbacks(call):
     if not is_admin(call.from_user.id):
@@ -2315,7 +2534,7 @@ def handle_admin_panel_callbacks(call):
         
     action = call.data.split(':')[1]
     admin_chat = call.message.chat.id
-    headers = {"Authorization": f"Bearer {XUI_BEARER_TOKEN}", "Content-Type": "application/json"}
+    headers = _xui_headers()
     request_proxies = {'http': 'http://127.0.0.1:10808', 'https': 'http://127.0.0.1:10808'} if DEVELOPMENT_MODE else None
 
     if action == "approve" or action == "reject":
@@ -2908,22 +3127,55 @@ def handle_admin_panel_callbacks(call):
         bot.register_next_step_handler(msg, process_admin_broadcast)
         
     elif action == "bank_config":
-        card_num = get_db_setting('card_number')
-        card_holder = get_db_setting('card_holder')
-        bank_name = get_db_setting('bank_name')
-        
-        bank_txt = f"💳 **مشخصات فعلی واریز ربات:**\n\n🏦 بانک: {bank_name}\n💳 شماره کارت: `{card_num}`\n👤 به نام: {card_holder}"
-        b_markup = types.InlineKeyboardMarkup()
-        b_markup.add(
-            types.InlineKeyboardButton("✏️ تغییر شماره کارت", callback_data="admin:edit_card"),
-            types.InlineKeyboardButton("✏️ تغییر نام صاحب حساب", callback_data="admin:edit_holder"),
-            types.InlineKeyboardButton("✏️ تغییر نام بانک", callback_data="admin:edit_bank")
+        _show_admin_bank_config(admin_chat)
+
+    elif action == "view_card_image":
+        card_photo = get_db_setting('card_photo', '').strip()
+        if not card_photo:
+            bot.answer_callback_query(call.id, "تصویری ثبت نشده است.", show_alert=True)
+        else:
+            bot.answer_callback_query(call.id)
+            try:
+                bot.send_photo(admin_chat, card_photo, caption="🖼 تصویر فعلی کارت بانکی جهت پرداخت مشتری")
+            except Exception as e:
+                bot.send_message(admin_chat, f"❌ خطا در نمایش تصویر: {e}")
+
+    elif action == "del_card_image":
+        update_db_setting('card_photo', '')
+        bot.answer_callback_query(call.id, "تصویر کارت با موفقیت حذف شد ✅", show_alert=True)
+        _show_admin_bank_config(admin_chat)
+
+    elif action == "edit_card_image":
+        msg = bot.send_message(
+            admin_chat,
+            "🖼 لطفاً عکس کارت بانکی یا تصویر کد QR حساب خود را ارسال کنید:",
+            reply_markup=back_menu()
         )
-        bot.send_message(admin_chat, bank_txt, parse_mode="Markdown", reply_markup=b_markup)
-        
+        bot.register_next_step_handler(msg, process_edit_card_image)
+
     elif action in ["edit_card", "edit_holder", "edit_bank"]:
         msg = bot.send_message(admin_chat, f"✍️ مقدار جدید را وارد کنید:")
         bot.register_next_step_handler(msg, process_edit_bank, action)
+
+    elif action == "xui_config":
+        _show_admin_xui_config(admin_chat)
+
+    elif action == "xui_test":
+        bot.answer_callback_query(call.id, "در حال بررسی اتصال به پنل...")
+        diag = _run_xui_diagnostic()
+        bot.send_message(admin_chat, f"🧪 <b>نتیجه تست اتصال به پنل سنائی:</b>\n\n{diag}", parse_mode="HTML")
+
+    elif action in ["xui_edit_api_url", "xui_edit_base_path", "xui_edit_token", "xui_edit_sub_url", "xui_edit_sub_path", "xui_replace_domain"]:
+        xui_handlers = {
+            "xui_edit_api_url": process_edit_xui_api_url,
+            "xui_edit_base_path": process_edit_xui_base_path,
+            "xui_edit_token": process_edit_xui_token,
+            "xui_edit_sub_url": process_edit_xui_sub_url,
+            "xui_edit_sub_path": process_edit_xui_sub_path,
+            "xui_replace_domain": process_xui_replace_domain,
+        }
+        msg = bot.send_message(admin_chat, "✍️ مقدار جدید را وارد کنید:", reply_markup=back_menu())
+        bot.register_next_step_handler(msg, xui_handlers[action])
         
     elif action == "delete_user":
         msg = bot.send_message(admin_chat, "👤 آیدی عددی کاربر را برای غیرفعال‌سازی وارد کنید. سوابق مالی، تست و معرف حذف نمی‌شوند:")
@@ -3359,6 +3611,106 @@ def process_edit_bank(message, field_type):
         update_db_setting('bank_name', message.text.strip())
     bot.send_message(message.chat.id, "✅ مشخصات بانکی با موفقیت به‌روزرسانی شد.")
 
+
+def process_edit_card_image(message):
+    raw_text = (message.text or "").strip()
+    if raw_text == "🔙 بازگشت به منوی اصلی":
+        bot.send_message(message.chat.id, "عملیات لغو شد.", reply_markup=main_menu())
+        return
+
+    photo_id = None
+    if getattr(message, 'photo', None):
+        photo_id = message.photo[-1].file_id
+    elif getattr(message, 'document', None) and getattr(message.document, 'mime_type', '').startswith('image/'):
+        photo_id = message.document.file_id
+
+    if not photo_id:
+        bot.send_message(
+            message.chat.id,
+            "❌ هیچ تصویری دریافت نشد. لطفاً یک عکس ارسال کنید یا از منوی پایین بازگشت را بزنید.",
+            reply_markup=back_menu()
+        )
+        bot.register_next_step_handler(message, process_edit_card_image)
+        return
+
+    update_db_setting('card_photo', photo_id)
+    bot.send_message(
+        message.chat.id,
+        "✅ تصویر کارت بانکی با موفقیت ثبت شد. از این پس این تصویر به همراه مشخصات کارت برای مشتری ارسال خواهد شد.",
+        reply_markup=main_menu()
+    )
+
+
+def process_edit_xui_api_url(message):
+    raw = (message.text or "").strip()
+    if raw == "🔙 بازگشت به منوی اصلی":
+        bot.send_message(message.chat.id, "عملیات لغو شد.", reply_markup=main_menu())
+        return
+    if not (raw.startswith("http://") or raw.startswith("https://")):
+        bot.send_message(message.chat.id, "❌ آدرس پنل باید با http:// یا https:// شروع شود.\nمثال: `https://panel.speed-ping.shop:2053`", parse_mode="Markdown")
+        return
+    update_xui_config('xui_api_url', raw)
+    bot.send_message(message.chat.id, f"✅ آدرس وب‌سرویس پنل با موفقیت به‌روزرسانی شد:\n`{raw}`\n(در دیتابیس و فایل .env ذخیره شد)", parse_mode="Markdown", reply_markup=main_menu())
+
+
+def process_edit_xui_base_path(message):
+    raw = (message.text or "").strip()
+    if raw == "🔙 بازگشت به منوی اصلی":
+        bot.send_message(message.chat.id, "عملیات لغو شد.", reply_markup=main_menu())
+        return
+    update_xui_config('xui_base_path', raw)
+    bot.send_message(message.chat.id, f"✅ مسیر امن پنل با موفقیت به‌روزرسانی شد:\n`{raw}`", parse_mode="Markdown", reply_markup=main_menu())
+
+
+def process_edit_xui_token(message):
+    raw = (message.text or "").strip()
+    if raw == "🔙 بازگشت به منوی اصلی":
+        bot.send_message(message.chat.id, "عملیات لغو شد.", reply_markup=main_menu())
+        return
+    if len(raw) < 10:
+        bot.send_message(message.chat.id, "❌ توکن وارد شده نامعتبر است (طول توکن بسیار کوتاه است).")
+        return
+    update_xui_config('xui_bearer_token', raw)
+    bot.send_message(message.chat.id, "✅ توکن دسترسی به پنل سنائی با موفقیت به‌روزرسانی شد.", reply_markup=main_menu())
+
+
+def process_edit_xui_sub_url(message):
+    raw = (message.text or "").strip()
+    if raw == "🔙 بازگشت به منوی اصلی":
+        bot.send_message(message.chat.id, "عملیات لغو شد.", reply_markup=main_menu())
+        return
+    if not (raw.startswith("http://") or raw.startswith("https://")):
+        bot.send_message(message.chat.id, "❌ آدرس سرور سابسکریپشن باید با http:// یا https:// شروع شود.\nمثال: `https://sub.speed-ping.shop:2096`", parse_mode="Markdown")
+        return
+    update_xui_config('xui_sub_server_url', raw)
+    bot.send_message(message.chat.id, f"✅ دامنه سابسکریپشن با موفقیت به‌روزرسانی شد:\n`{raw}`\n(تمامی لینک‌های ساب مشتریان از این پس با این دامنه ساخته می‌شوند)", parse_mode="Markdown", reply_markup=main_menu())
+
+
+def process_edit_xui_sub_path(message):
+    raw = (message.text or "").strip()
+    if raw == "🔙 بازگشت به منوی اصلی":
+        bot.send_message(message.chat.id, "عملیات لغو شد.", reply_markup=main_menu())
+        return
+    update_xui_config('xui_sub_path', raw)
+    bot.send_message(message.chat.id, f"✅ مسیر سابسکریپشن با موفقیت به‌روزرسانی شد:\n`{raw}`", parse_mode="Markdown", reply_markup=main_menu())
+
+
+def process_xui_replace_domain(message):
+    raw = (message.text or "").strip()
+    if raw == "🔙 بازگشت به منوی اصلی":
+        bot.send_message(message.chat.id, "عملیات لغو شد.", reply_markup=main_menu())
+        return
+    parts = [p.strip() for p in raw.split("|") if p.strip()]
+    if len(parts) != 2:
+        bot.send_message(message.chat.id, "❌ لطفاً دامنه قبلی و جدید را با علامت | جدا کنید.\nمثال:\n`speed-ping.com | speed-ping.shop`", parse_mode="Markdown")
+        return
+    old_domain, new_domain = parts[0], parts[1]
+    ok, msg = replace_domain_in_all_configs(old_domain, new_domain)
+    if ok:
+        bot.send_message(message.chat.id, f"✅ {msg}", reply_markup=main_menu())
+    else:
+        bot.send_message(message.chat.id, f"❌ {msg}", reply_markup=main_menu())
+
 def process_delete_bot_user(message):
     try:
         target_id = int(message.text.strip())
@@ -3378,7 +3730,7 @@ def process_delete_bot_user(message):
 
 def process_delete_panel_sub(message):
     email = message.text.strip()
-    headers = {"Authorization": f"Bearer {XUI_BEARER_TOKEN}", "Content-Type": "application/json"}
+    headers = _xui_headers()
     request_proxies = {'http': 'http://127.0.0.1:10808', 'https': 'http://127.0.0.1:10808'} if DEVELOPMENT_MODE else None
     
     try:
@@ -3392,7 +3744,7 @@ def process_delete_panel_sub(message):
 # --- X-UI AUTO CREATION ENGINE ---
 def _xui_headers():
     return {
-        "Authorization": f"Bearer {XUI_BEARER_TOKEN}",
+        "Authorization": f"Bearer {get_xui_bearer_token()}",
         "Accept": "application/json",
         "Content-Type": "application/json"
     }
@@ -3400,8 +3752,8 @@ def _xui_headers():
 
 def _xui_url(endpoint):
     """Build a 3x-ui API URL while safely honoring the configured web base path."""
-    base = (XUI_API_URL or "").strip().rstrip("/")
-    base_path = (XUI_BASE_PATH or "").strip()
+    base = get_xui_api_url().rstrip("/")
+    base_path = get_xui_base_path()
     if not base:
         raise RuntimeError("XUI_API_URL تنظیم نشده است.")
     if base_path in ("", "/"):
@@ -3412,8 +3764,8 @@ def _xui_url(endpoint):
 
 
 def _subscription_url(sub_id):
-    base = (XUI_SUB_SERVER_URL or "").strip().rstrip("/")
-    path = (XUI_SUB_PATH or "/sub/").strip()
+    base = get_xui_sub_server_url().rstrip("/")
+    path = get_xui_sub_path()
     if not path.startswith("/"):
         path = "/" + path
     if not path.endswith("/"):

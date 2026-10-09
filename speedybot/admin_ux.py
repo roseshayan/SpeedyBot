@@ -11,7 +11,11 @@ UX problems without rewriting the stable business handlers:
 
 from html import escape
 
-from telebot.handler_backends import ContinueHandling
+try:
+    from telebot.handler_backends import ContinueHandling
+except ImportError:  # pragma: no cover
+    class ContinueHandling:
+        pass
 
 from . import context as C
 from . import ui
@@ -23,7 +27,9 @@ LEGACY_WIZARDS = {
     "discount_toggle", "gift_toggle", "channel_set", "admin_add",
     "admin_remove", "welcome_edit", "faq_edit", "affiliate_percent",
     "affiliate_wallet", "broadcast", "edit_card", "edit_holder", "edit_bank",
-    "delete_user", "delete_sub", "guideadd", "guidedeleteask", "guideorderask",
+    "edit_card_image", "delete_user", "delete_sub", "guideadd", "guidedeleteask", "guideorderask",
+    "xui_edit_api_url", "xui_edit_base_path", "xui_edit_token",
+    "xui_edit_sub_url", "xui_edit_sub_path", "xui_replace_domain",
 }
 
 PLUS_WIZARDS = {
@@ -38,7 +44,7 @@ FIX_WIZARDS = {"trial_defaults", "plan_delete", "category_delete"}
 LEGACY_MENU_NEEDS_ACK = {
     "stats", "plans", "username_mode", "rewards", "security", "admins",
     "ops", "content", "affiliate", "affiliate_top", "notifications",
-    "bank_config",
+    "bank_config", "xui_config",
 }
 
 
@@ -298,6 +304,72 @@ def _legacy_spec(call):
         }
         title, body = labels[action]
         return (title, body, core.process_edit_bank, (action,))
+
+    if action == "edit_card_image":
+        return (
+            "ثبت / تغییر تصویر کارت بانکی",
+            "یک <b>عکس</b> از کارت بانکی یا تصویر کد QR حساب خود ارسال کنید.\n\n"
+            "این عکس در مرحله پرداخت کارت به کارت به همراه شماره کارت و مبلغ برای خریدار ارسال می‌شود.\n"
+            "در صورت انصراف، دکمه «لغو عملیات» را بزنید.",
+            core.process_edit_card_image,
+            (),
+        )
+
+    if action == "xui_edit_api_url":
+        return (
+            "تغییر آدرس API پنل سنائی",
+            "آدرس وب‌سرویس پنل را به همراه پروتکل و پورت بفرستید.\n\n"
+            "<b>مثال:</b> <code>https://panel.speed-ping.shop:2053</code>",
+            core.process_edit_xui_api_url,
+            (),
+        )
+
+    if action == "xui_edit_base_path":
+        return (
+            "تغییر مسیر امن پنل (Base Path)",
+            "مسیر امن وب‌پنل را بفرستید. در صورتی که مسیر اختصاصی ندارید، <code>/</code> ارسال کنید.\n\n"
+            "<b>مثال:</b> <code>/my-secret-path</code>",
+            core.process_edit_xui_base_path,
+            (),
+        )
+
+    if action == "xui_edit_token":
+        return (
+            "تغییر توکن پنل (Bearer Token)",
+            "توکن API تولید شده در پنل سنائی (مسیر Settings → Security → API Token) را بفرستید.",
+            core.process_edit_xui_token,
+            (),
+        )
+
+    if action == "xui_edit_sub_url":
+        return (
+            "تغییر دامنه سابسکریپشن (Sub URL)",
+            "آدرس سرور یا دامنه سابسکریپشن را همراه با پروتکل و پورت ارسال کنید.\n\n"
+            "<b>مثال:</b> <code>https://sub.speed-ping.shop:2096</code>\n\n"
+            "💡 از این پس تمامی لینک‌های ساب که به مشتریان نمایش داده می‌شوند با این دامنه جدید ساخته خواهند شد.",
+            core.process_edit_xui_sub_url,
+            (),
+        )
+
+    if action == "xui_edit_sub_path":
+        return (
+            "تغییر مسیر سابسکریپشن (Sub Path)",
+            "مسیر سابسکریپشن را بفرستید (پیش‌فرض: <code>/sub/</code>).\n\n"
+            "<b>مثال:</b> <code>/sub/</code>",
+            core.process_edit_xui_sub_path,
+            (),
+        )
+
+    if action == "xui_replace_domain":
+        return (
+            "جایگزینی دامنه در دیتابیس و .env",
+            "دامنه قبلی و دامنه جدید را با <code>|</code> جدا کرده و بفرستید.\n\n"
+            "این تغییر بلافاصله در آدرس پنل، دامنه سابسکریپشن، فایل .env و متن‌های راهنما اعمال می‌شود.\n\n"
+            "<b>مثال:</b>\n"
+            "<code>speed-ping.com | speed-ping.shop</code>",
+            core.process_xui_replace_domain,
+            (),
+        )
 
     if action == "delete_user":
         return (

@@ -1,9 +1,8 @@
 import unittest
 from types import SimpleNamespace
 
-from telebot.handler_backends import ContinueHandling
-
 from speedybot import admin_ux
+from speedybot.admin_ux import ContinueHandling
 from speedybot import context as C
 
 
