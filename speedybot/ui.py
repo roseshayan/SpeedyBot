@@ -85,15 +85,18 @@ def admin_menu():
             C.inline("☁️ سرور مجازی ساعتی", callback_data="custom:hosting", style_name="success"),
         ),
         (
-            C.inline("🎨 ظاهر و دکمه‌ها", callback_data="plus:ui", style_name="primary", emoji_key="admin"),
+            C.inline("🌐 پنل و دامنه (.env)", callback_data="admin:xui_config", style_name="primary"),
             C.inline("💳 حساب واریز", callback_data="admin:bank_config"),
         ),
         (
+            C.inline("🎨 ظاهر و دکمه‌ها", callback_data="plus:ui", style_name="primary", emoji_key="admin"),
             C.inline("📝 متن‌ها و FAQ", callback_data="admin:content"),
-            C.inline("👤 غیرفعال‌کردن کاربر", callback_data="admin:delete_user", style_name="danger"),
         ),
         (
+            C.inline("👤 غیرفعال‌کردن کاربر", callback_data="admin:delete_user", style_name="danger"),
             C.inline("🔌 حذف از پنل", callback_data="admin:delete_sub", style_name="danger"),
+        ),
+        (
             C.inline("↩️ بروزرسانی منو", callback_data="plus:home"),
         ),
     ]

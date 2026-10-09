@@ -1,6 +1,6 @@
-# SpeedyBot v4.3.0 — Card Image Support, Live Domain Manager & Automated Backup/Restore
+# SpeedyBot v4.3.0 — Card Image Checkout, Live Domain Manager & Automated Backup/Restore
 
-This release introduces dynamic card image sending during checkout, in-bot live `.env` and panel domain management, automated Telegram database backup dispatch, full in-bot & CLI database restoration capabilities, and an official Sanaei 3x-ui OpenAPI specification audit.
+This release introduces dynamic bank card photo checkout, in-bot `.env` and panel domain management, automated Telegram database backup dispatch, full in-bot & CLI database restoration capabilities, and an official Sanaei 3x-ui OpenAPI specification audit.
 
 ## Added
 

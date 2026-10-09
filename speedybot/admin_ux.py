@@ -11,7 +11,11 @@ UX problems without rewriting the stable business handlers:
 
 from html import escape
 
-from telebot.handler_backends import ContinueHandling
+try:
+    from telebot.handler_backends import ContinueHandling
+except ImportError:  # pragma: no cover
+    class ContinueHandling:
+        pass
 
 from . import context as C
 from . import ui
@@ -23,14 +27,10 @@ LEGACY_WIZARDS = {
     "discount_toggle", "gift_toggle", "channel_set", "admin_add",
     "admin_remove", "welcome_edit", "faq_edit", "affiliate_percent",
     "affiliate_wallet", "broadcast", "edit_card", "edit_holder", "edit_bank",
-<<<<<<< Updated upstream
-    "delete_user", "delete_sub", "guideadd", "guidedeleteask", "guideorderask",
-=======
     "edit_card_image", "delete_user", "delete_sub", "guideadd", "guidedeleteask", "guideorderask",
     "xui_edit_api_url", "xui_edit_base_path", "xui_edit_token",
     "xui_edit_sub_url", "xui_edit_sub_path", "xui_replace_domain",
     "backup_restore",
->>>>>>> Stashed changes
 }
 
 PLUS_WIZARDS = {
@@ -45,11 +45,7 @@ FIX_WIZARDS = {"trial_defaults", "plan_delete", "category_delete"}
 LEGACY_MENU_NEEDS_ACK = {
     "stats", "plans", "username_mode", "rewards", "security", "admins",
     "ops", "content", "affiliate", "affiliate_top", "notifications",
-<<<<<<< Updated upstream
-    "bank_config",
-=======
     "bank_config", "xui_config", "backup_now", "backup_toggle", "backup_telegram_toggle",
->>>>>>> Stashed changes
 }
 
 
@@ -310,8 +306,6 @@ def _legacy_spec(call):
         title, body = labels[action]
         return (title, body, core.process_edit_bank, (action,))
 
-<<<<<<< Updated upstream
-=======
     if action == "edit_card_image":
         return (
             "ثبت / تغییر تصویر کارت بانکی",
@@ -389,8 +383,6 @@ def _legacy_spec(call):
             core.process_admin_backup_restore,
             (),
         )
-
->>>>>>> Stashed changes
     if action == "delete_user":
         return (
             "غیرفعال کردن کاربر ربات",
