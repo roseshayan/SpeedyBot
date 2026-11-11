@@ -1,4 +1,4 @@
-# SpeedyBot v4.0.0
+# SpeedyBot v5.0.0
 
 <p align="center">
   <strong>ربات متن‌باز فروش، مدیریت اشتراک و CRM تلگرامی برای پنل 3x-ui / Sanaei</strong><br>
@@ -19,23 +19,13 @@
 
 SpeedyBot یک ربات تلگرام عملی برای فروش و مدیریت سرویس‌های **3x-ui / Sanaei** است. ربات می‌تواند بعد از تأیید پرداخت Client بسازد، تست رایگان بدهد، پلان بفروشد و تمدید کند، لینک Subscription و کانفیگ مستقیم تحویل دهد، QR بسازد، کیف پول و Referral داشته باشد، پایان حجم/زمان را پیگیری کند، راهنمای اتصال بسازد و بیشتر عملیات روزمره فروش و مدیریت را از داخل Telegram انجام دهد.
 
-## مهم: نسخه v4 خودِ پروژه است
+## نسخه 5.0.0
 
-نسخه نهایی v4 دیگر یک پوشه یا Add-on جدا روی نسخه قدیمی نیست.
+این نسخه به **Python 3.11 یا جدیدتر** نیاز دارد. وابستگی‌ها با آخرین نسخه‌های PyPI هماهنگ شده‌اند، CI روی Python 3.11 تا 3.15 اجرا می‌شود و آپدیتر محیط Python جدید را قبل از توقف سرویس آماده و آزمایش می‌کند. در صورت شکست انتشار، کد، داده و وابستگی‌های قبلی با هم بازیابی می‌شوند.
 
-Entry Point رسمی و Production پروژه فقط این فایل است:
+مسیر اجرای برنامه همچنان `main.py` و پکیج `speedybot/` است. تنظیمات `.env` و دیتابیس `speedping.db` در مسیر فعلی باقی می‌مانند.
 
-```text
-/root/SpeedyBot/main.py
-```
-
-کد اصلی برنامه در پکیج دائمی زیر قرار دارد:
-
-```text
-/root/SpeedyBot/speedybot/
-```
-
-پوشه‌های نسخه‌دار مثل `speedybot_v4/` و Entry Point جدا مثل `app.py` در ساختار نهایی وجود ندارند. Installer، Updater، systemd و اجرای دستی همگی از همان `main.py` استفاده می‌کنند.
+[تغییرات نسخه ۵](docs/releases/RELEASE_NOTES_v5.0.0.md) · [راهنمای مهاجرت](MIGRATION_NOTES.md) · [بررسی ساختار، API و پیشنهادهای توسعه](docs/AUDIT_FA.md) · [آرشیو نسخه‌ها](docs/releases/README.md)
 
 ---
 
@@ -241,7 +231,7 @@ Custom/Premium Emoji اختیاری است و اگر Telegram اجازه نده�
 پیشنهاد برای Production:
 
 - Ubuntu **24.04 LTS**.
-- Python 3.12.
+- **Python 3.11 یا جدیدتر**؛ برای Production نسخه 3.12 به بالا پیشنهاد می‌شود. نسخه‌های جدید pyTelegramBotAPI و Pillow به حداقل 3.11 نیاز دارند.
 - پنل به‌روز 3x-ui / Sanaei با API مسیر `/panel/api/*`.
 - Bearer API Token پنل.
 - Bot Token از `@BotFather`.
@@ -797,22 +787,17 @@ cd /root/SpeedyBot
 
 ### Updater دقیقاً چه می‌کند؟
 
-1. خودش را از `/tmp` دوباره اجرا می‌کند تا هنگام Replace شدن `update.sh` قطع نشود.
-2. Commit فعلی `main` در GitHub را پیدا می‌کند.
-3. کل Repository را داخل `/tmp` Clone می‌کند.
-4. `main.py`، تمام `speedybot/*.py`، `install.sh` و `update.sh` را Validate می‌کند.
-5. Dependencyها را قبل از Downtime نصب می‌کند.
-6. systemd را Stop می‌کند.
-7. از کل Source فعلی یک Rollback Backup می‌گیرد.
-8. `.env` و SQLite DB/WAL/SHM را جدا بکاپ می‌گیرد.
-9. با `rsync --delete` کل Source سرور را با Repository هماهنگ می‌کند.
-10. `.env`، `.venv/`، SQLite، `backups/`، `run.sh` و `.deployed_commit` را Preserve می‌کند.
-11. `run.sh` را طوری می‌سازد که فقط `main.py` را اجرا کند.
-12. سرویس را Restart و Health Check می‌کند.
-13. Crash Loop اولیه را بررسی می‌کند.
-14. اگر Deploy خراب باشد، Source و دیتابیس قبلی را Restore می‌کند.
+1. کد برنچ انتخاب‌شده را دانلود می‌کند و شناسه Commit را بررسی می‌کند.
+2. محیط Python جداگانه‌ای زیر `.venvs/` می‌سازد و وابستگی‌های نسخه جدید را نصب می‌کند.
+3. قبل از توقف ربات، Syntax پایتون و Shell، تست‌های واحد، وابستگی‌ها و تطابق نسخه را بررسی می‌کند.
+4. سرویس را متوقف می‌کند، از کد و داده و محیط Python قبلی بکاپ می‌گیرد، سپس سورس و لینک `.venv` را به نسخه جدید تغییر می‌دهد.
+5. سرویس را راه‌اندازی و بررسی می‌کند؛ اگر اجرا شکست بخورد، بازیابی کد، داده و وابستگی‌های قبلی را انجام می‌دهد.
 
-چون Source با `--delete` Sync می‌شود، فایل‌ها و پوشه‌های قدیمی که دیگر در GitHub وجود ندارند خودکار از Deployment حذف می‌شوند. یعنی سرور واقعاً با نسخه منتشرشده یکی می‌شود.
+فایل `.env`، دیتابیس و فایل‌های WAL/SHM، پوشه `backups/` و محیط‌های Python از همگام‌سازی سورس خارج هستند. محیط‌های قبلی را فقط پس از اطمینان از نسخه جدید حذف کنید. برای انتخاب مفسر مشخص:
+
+```bash
+SPEEDYBOT_PYTHON=/usr/bin/python3.12 ./update.sh
+```
 
 ---
 
@@ -881,37 +866,24 @@ Runtime حیاتی:
 
 ```text
 SpeedyBot/
-├── main.py                    # Entry Point اصلی و Production
-├── speedybot/                 # پکیج یکپارچه برنامه
-│   ├── __init__.py
-│   ├── core.py                # هسته فروش و Provisioning
-│   ├── context.py
-│   ├── storage.py
-│   ├── ui.py
-│   ├── user_handlers.py
-│   ├── admin_handlers.py
-│   ├── trial.py
-│   ├── corepatch.py
-│   ├── ops.py
-│   └── handlers.py
-├── tests/
-│   └── test_storage.py
-├── install.sh
-├── update.sh
-├── requirements.txt
+├── main.py                    # Telegram polling entrypoint
+├── restore.py                 # offline database restore CLI
+├── speedybot/                 # business logic, handlers and operations
+├── tests/                     # offline unit and regression tests
+├── docs/
+│   ├── AUDIT_FA.md            # architecture, API audit and roadmap
+│   └── releases/              # version history and release notes
+├── .github/                   # CI, Dependabot and contribution templates
+├── .env.example               # configuration template; no real secrets
+├── install.sh                 # fresh installation
+├── update.sh                  # staged deployment and rollback
+├── restore.sh                 # restore CLI launcher
+├── requirements.txt           # pinned direct release dependencies
 ├── VERSION.txt
-├── README.md
-├── README_FA.md
+├── README.md / README_FA.md
 ├── CHANGELOG.md
 ├── MIGRATION_NOTES.md
-├── RELEASE_NOTES_v4.0.0.md
-├── SECURITY.md
-├── SUPPORT.md
-├── CONTRIBUTING.md
-├── AUTHOR.md
-├── LICENSE
-├── .env.example
-└── .github/
+└── LICENSE
 ```
 
 هیچ پوشه نسخه‌داری مثل `speedybot_v4/` در Application وجود ندارد.

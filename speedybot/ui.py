@@ -163,13 +163,13 @@ def send_category(chat_id, uid, cid):
         C.BOT.send_message(chat_id, "⛔️ در این دسته پلان فعالی نیست.", reply_markup=main_menu())
         return
     balance = int(bal[0] or 0) if bal else 0
-    out = [f"🗂 <b>{cat['name']}</b>", "━━━━━━━━━━━━━━━━"]
+    out = [f"🗂 <b>{escape(str(cat['name']))}</b>", "━━━━━━━━━━━━━━━━"]
     m = C.CORE.types.InlineKeyboardMarkup(row_width=1)
     for p in plans:
         vol = "نامحدود" if float(p["volume_gb"] or 0) <= 0 else f"{float(p['volume_gb']):g} GB"
         ip = "بدون محدودیت" if int(p["ip_limit"] or 0) <= 0 else f"{int(p['ip_limit'])} IP"
         out.append(
-            f"\n📦 <b>{p['name']}</b>\n├ 💵 {int(p['price']):,} تومان\n├ 📅 {int(p['days'])} روز\n├ 📊 {vol}\n└ 👥 {ip}"
+            f"\n📦 <b>{escape(str(p['name']))}</b>\n├ 💵 {int(p['price']):,} تومان\n├ 📅 {int(p['days'])} روز\n├ 📊 {vol}\n└ 👥 {ip}"
         )
         m.add(
             C.inline(

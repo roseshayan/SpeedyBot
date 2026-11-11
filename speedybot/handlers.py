@@ -8,12 +8,12 @@ def register():
     admin_handlers.register()
     trial.register()
     admin_tools.register()
-    # Register last: admin_ux promotes its guard/wizard callbacks ahead of the
-    # legacy handlers while still allowing non-wizard actions to continue.
-    admin_ux.register()
     # White-label/customer-menu callbacks use their own namespace and are
     # promoted so they cannot be swallowed by broader callback handlers.
     customization.register()
-    # Register linked-service handlers last so view:linked callbacks override
+    # Promote linked-service handlers so view:linked callbacks override
     # the legacy read-only linked-service status handler.
     linked_services.register()
+    # Register last so admin navigation also cancels pending steps when entering
+    # customization. Unrelated callbacks continue to their namespace handlers.
+    admin_ux.register()

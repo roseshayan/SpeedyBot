@@ -9,6 +9,7 @@ import re
 import secrets
 import threading
 import json
+import logging
 import shutil
 from io import BytesIO
 from pathlib import Path
@@ -25,8 +26,9 @@ from . import env_manager
 from . import backup_manager
 env_manager.load_env_file()
 # --- CONFIGURATIONS (READING FROM SYSTEM ENV) ---
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+logger = logging.getLogger(__name__)
 
 # تنظیمات اتصال به پنل سنائی
 XUI_API_URL = os.getenv("XUI_API_URL")          # مثلا http://127.0.0.1:2053
@@ -36,6 +38,8 @@ XUI_SUB_SERVER_URL = os.getenv("XUI_SUB_SERVER_URL") # مثلا https://sub.exam
 XUI_SUB_PATH = os.getenv("XUI_SUB_PATH", "/sub/")  # مسیر Subscription در Settings → Subscription
 
 DEVELOPMENT_MODE = False
+if not BOT_TOKEN:
+    raise RuntimeError("BOT_TOKEN تنظیم نشده است؛ توکن ربات را در فایل .env یا متغیرهای محیطی وارد کنید.")
 bot = telebot.TeleBot(BOT_TOKEN)
 USER_STATES = {}
 _BOT_USERNAME_CACHE = None
@@ -488,19 +492,9 @@ def replace_domain_in_all_configs(old_domain, new_domain):
                 update_db_setting(skey, new_val)
             changes.append(skey)
 
-    try:
-        env_path = env_manager.find_env_file()
-        if os.path.isfile(env_path):
-            with open(env_path, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
-            if old_domain in content:
-                new_content = content.replace(old_domain, new_domain)
-                with open(env_path, 'w', encoding='utf-8') as f:
-                    f.write(new_content)
-                changes.append('.env')
-                env_manager.load_env_file(env_path)
-    except Exception:
-        pass
+    # URL settings above persist through env_manager's atomic writer. Never
+    # replace raw .env text: a domain-looking substring may belong to a token,
+    # password, or secret web base path that must remain byte-for-byte intact.
 
     return True, f"دامنه با موفقیت جایگزین شد. بخش‌های به‌روزرسانی‌شده: {', '.join(changes) if changes else 'تنظیمات با دامنه جدید همگام بودند'}"
 
@@ -749,8 +743,8 @@ def credit_cashback(tx_id):
 def create_database_backup(manual=False):
     backup_root = Path('backups') / 'auto'
     backup_root.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-    target = backup_root / f"speedping-{stamp}.db"
+    stamp = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+    target = backup_root / f"speedping-{stamp}-{secrets.token_hex(4)}.db"
     src = sqlite3.connect('speedping.db', timeout=30)
     dst = sqlite3.connect(str(target))
     try:
@@ -1150,7 +1144,7 @@ TRIAL_FOLLOWUP_REASONS = {
     'other': 'دلیل دیگر',
 }
 
-PROXY_LINK_SCHEMES = ('vless://', 'vmess://', 'trojan://', 'ss://', 'hysteria://', 'hysteria2://', 'hy2://')
+PROXY_LINK_SCHEMES = ('vless://', 'vmess://', 'trojan://', 'ss://', 'hysteria://', 'hysteria2://', 'hy2://', 'tuic://', 'tg://proxy?')
 
 
 def trial_enabled():
@@ -2147,15 +2141,18 @@ def send_xui_status(user_id, user_email, service_tx_id=None):
     request_proxies = {'http': 'http://127.0.0.1:10808', 'https': 'http://127.0.0.1:10808'} if DEVELOPMENT_MODE else None
     
     try:
-        client_url = _xui_url(f"panel/api/clients/get/{quote(str(user_email), safe='')}")
-        response = requests.get(client_url, headers=headers, proxies=request_proxies, timeout=15, verify=not DEVELOPMENT_MODE)
-        client_data = response.json().get("obj", {}) if response.status_code == 200 and response.json().get("success") else {}
+        client_data = _get_client_data(user_email, headers, request_proxies)
         
         traffic_url = _xui_url(f"panel/api/clients/traffic/{quote(str(user_email), safe='')}")
         traffic_res = requests.get(traffic_url, headers=headers, proxies=request_proxies, timeout=15, verify=not DEVELOPMENT_MODE)
-        traffic_data = traffic_res.json().get("obj", {}) if traffic_res.status_code == 200 and traffic_res.json().get("success") else {}
+        traffic_body = _safe_json(traffic_res)
+        traffic_data = traffic_body.get("obj") if traffic_res.status_code == 200 and traffic_body.get("success") else {}
+        if not isinstance(traffic_data, dict):
+            traffic_data = {}
         
         data = {**client_data, **traffic_data}
+        if data:
+            data['enable'] = bool(client_data.get('enable', True)) and bool(traffic_data.get('enable', True))
         
         if data:
             enable_status = "🟢 فعال" if data.get("enable", True) else "🔴 غیرفعال"
@@ -2171,6 +2168,8 @@ def send_xui_status(user_id, user_email, service_tx_id=None):
             
             if expiry_time_ms == 0:
                 time_left_str = "بدون محدودیت زمانی"
+            elif expiry_time_ms < 0:
+                time_left_str = f"⏳ {abs(expiry_time_ms) / 86400000:g} روز پس از اولین اتصال"
             elif expiry_time_ms < current_time_ms:
                 time_left_str = "❌ منقضی شده"
             else:
@@ -2211,27 +2210,71 @@ def send_xui_status(user_id, user_email, service_tx_id=None):
     except Exception as e:
         bot.send_message(user_id, f"🚨 خطا در خواندن اطلاعات فنی سرور.")
 
+def _user_owns_service(user_id, email):
+    """Authorize credentials against local ownership, never callback text alone."""
+    conn = _db_connect()
+    try:
+        return conn.execute(
+            "SELECT 1 FROM transactions WHERE user_id=? AND service_email=? AND status='APPROVED' "
+            "UNION ALL SELECT 1 FROM trial_services WHERE user_id=? AND email=? AND status IN ('ACTIVE','EXPIRED') "
+            "UNION ALL SELECT 1 FROM linked_services WHERE user_id=? AND email=? LIMIT 1",
+            (int(user_id), str(email)) * 3,
+        ).fetchone() is not None
+    finally:
+        conn.close()
+
+
+def _user_owns_subscription(user_id, sub_id):
+    response = requests.get(
+        _xui_url(f"panel/api/clients/get/subId/{quote(str(sub_id), safe='')}"),
+        headers=_xui_headers(), proxies=_xui_proxies(), timeout=15, verify=not DEVELOPMENT_MODE,
+    )
+    data = _safe_json(response)
+    clients = data.get('obj')
+    if response.status_code != 200 or not data.get('success') or not isinstance(clients, list) or not clients:
+        return False
+    return all(
+        _user_owns_service(user_id, _normalize_client_data(item).get('email', ''))
+        for item in clients
+    )
+
+
+def _authorize_service_callback(call, value, subscription=False):
+    try:
+        uid = int(call.from_user.id)
+        # Credentials are delivered only to their owner's private conversation.
+        allowed = uid == int(call.message.chat.id) and (
+            _user_owns_subscription(uid, value) if subscription else _user_owns_service(uid, value)
+        )
+    except Exception:
+        allowed = False
+    if not allowed:
+        bot.answer_callback_query(call.id, "دسترسی به این سرویس مجاز نیست.", show_alert=True)
+    return allowed
+
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith('getlinks:'))
 def handle_account_get_links(call):
-    mode = call.data.split(':')[1]
-    param = call.data.split(':')[2]
-    user_id = call.message.chat.id
+    parts = call.data.split(':', 2)
+    if len(parts) != 3 or parts[1] not in ('sub', 'dir'):
+        bot.answer_callback_query(call.id, "درخواست نامعتبر است.", show_alert=True)
+        return
+    _, mode, param = parts
+    if not _authorize_service_callback(call, param, subscription=mode == 'sub'):
+        return
+    user_id = call.from_user.id
     headers = _xui_headers()
     request_proxies = {'http': 'http://127.0.0.1:10808', 'https': 'http://127.0.0.1:10808'} if DEVELOPMENT_MODE else None
     
     if mode == "sub":
+        bot.answer_callback_query(call.id)
         subscription_url = _subscription_url(param)
-        bot.send_message(user_id, f"🌐 **لینک سابسکریپشن اختصاصی شما (پورت 2096):**\n\n```\n{subscription_url}\n```", parse_mode="Markdown")
+        bot.send_message(user_id, f"🌐 **لینک سابسکریپشن اختصاصی شما:**\n\n```\n{subscription_url}\n```", parse_mode="Markdown")
     elif mode == "dir":
         bot.answer_callback_query(call.id, "در حال استخراج...")
-        get_links_url = _xui_url(f"panel/api/clients/links/{quote(str(param), safe='')}")
-        res = requests.get(get_links_url, headers=headers, proxies=request_proxies, timeout=15, verify=not DEVELOPMENT_MODE)
-        config_links = _clean_proxy_links(_safe_json(res).get("obj", []) if res.status_code == 200 and _safe_json(res).get("success") else [])
-        if not config_links:
-            client = _get_client_data(param, headers, request_proxies)
-            sid = _get_client_subscription_id(param, headers, request_proxies, client)
-            if sid:
-                config_links = _get_sub_protocol_links(sid, headers, request_proxies)
+        client = _get_client_data(param, headers, request_proxies)
+        sid = _get_client_subscription_id(param, headers, request_proxies, client)
+        config_links = _get_delivery_links(param, sid, headers, request_proxies)
         
         if config_links:
             msg_text = "🔑 **کانفیگ‌های اتصال مستقیم شما:**\n\n"
@@ -2244,6 +2287,8 @@ def handle_account_get_links(call):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('getqr:sub:'))
 def handle_subscription_qr(call):
     sub_id = call.data.split(':', 2)[2]
+    if not _authorize_service_callback(call, sub_id, subscription=True):
+        return
     url = _subscription_url(sub_id)
     if qrcode is None:
         bot.answer_callback_query(call.id, "کتابخانه QR روی سرور نصب نیست.", show_alert=True)
@@ -3145,9 +3190,9 @@ def handle_admin_panel_callbacks(call):
                 lines.append(f"{i}. `{row['referrer_id']}` — خریدار: {int(row['buyers'])} — پورسانت: **{int(row['earned'] or 0):,} تومان**")
             bot.send_message(admin_chat, "\n".join(lines), parse_mode="Markdown")
 
-    elif action == "retry":
+    elif action in ("retry", "retry_confirm"):
         tx_id = int(call.data.split(':')[2])
-        retry_issue_transaction(call, tx_id)
+        retry_issue_transaction(call, tx_id, confirmed=action == "retry_confirm")
         return
 
     elif action == "refund_wallet":
@@ -3296,9 +3341,14 @@ def handle_invoice_decision(call, action, tx_id):
     user_id = int(tx['user_id'])
 
     if action == "approve":
-        conn.execute("UPDATE transactions SET status = 'PROCESSING', last_error = NULL WHERE id = ?", (tx_id,))
+        claimed = conn.execute(
+            "UPDATE transactions SET status = 'PROCESSING', last_error = NULL WHERE id = ? AND status='PENDING'", (tx_id,),
+        ).rowcount
         conn.commit()
         conn.close()
+        if not claimed:
+            bot.answer_callback_query(call.id, "این تراکنش قبلاً تعیین تکلیف شده است.")
+            return
         bot.answer_callback_query(call.id, "پرداخت تایید شد؛ در حال صدور سرویس...")
         try:
             bot.edit_message_caption(
@@ -3310,16 +3360,24 @@ def handle_invoice_decision(call, action, tx_id):
             pass
         finalize_service_transaction(tx_id, admin_message_id=call.message.message_id, admin_chat_id=call.message.chat.id)
     elif action == "reject":
-        conn.execute("UPDATE transactions SET status = 'REJECTED', last_error = NULL WHERE id = ?", (tx_id,))
-        conn.execute("UPDATE discount_redemptions SET status='RELEASED' WHERE tx_id=? AND status='RESERVED'", (tx_id,))
+        claimed = conn.execute(
+            "UPDATE transactions SET status = 'REJECTED', last_error = NULL WHERE id = ? AND status='PENDING'", (tx_id,),
+        ).rowcount
+        if claimed:
+            conn.execute("UPDATE discount_redemptions SET status='RELEASED' WHERE tx_id=? AND status='RESERVED'", (tx_id,))
         conn.commit()
         conn.close()
+        if not claimed:
+            bot.answer_callback_query(call.id, "این تراکنش قبلاً تعیین تکلیف شده است.")
+            return
         bot.answer_callback_query(call.id, "فیش رد شد.")
         try:
             bot.edit_message_caption(chat_id=call.message.chat.id, message_id=call.message.message_id, caption=f"❌ فیش {tx_id} رد شد.")
         except Exception:
             pass
         bot.send_message(user_id, "❌ فیش واریزی شما توسط پشتیبانی رد شد.", reply_markup=main_menu())
+    else:
+        conn.close()
 
 
 def _admin_reply(message, text, **kwargs):
@@ -3621,16 +3679,37 @@ def process_admin_wallet_adjustment(message):
         bot.send_message(message.chat.id, "❌ فرمت نامعتبر است. مثال: `123456789 50000` یا `123456789 -20000`", parse_mode="Markdown")
 
 
-def retry_issue_transaction(call, tx_id):
+def retry_issue_transaction(call, tx_id, confirmed=False):
     conn = _db_connect()
-    tx = conn.execute("SELECT status FROM transactions WHERE id = ?", (tx_id,)).fetchone()
+    tx = conn.execute("SELECT status, kind FROM transactions WHERE id = ?", (tx_id,)).fetchone()
     if not tx or tx['status'] != 'ISSUE':
         conn.close()
         bot.answer_callback_query(call.id, "این تراکنش در وضعیت ISSUE نیست.", show_alert=True)
         return
-    conn.execute("UPDATE transactions SET status = 'PROCESSING', last_error = NULL WHERE id = ?", (tx_id,))
+    if (tx['kind'] or 'NEW') in ('RENEWAL', 'VOLUME') and not confirmed:
+        conn.close()
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton(
+            "پنل را بررسی کردم؛ تکرار شود", callback_data=f"admin:retry_confirm:{int(tx_id)}",
+        ))
+        markup.add(types.InlineKeyboardButton("بازگشت", callback_data="plus:home"))
+        bot.answer_callback_query(call.id)
+        bot.send_message(
+            call.message.chat.id,
+            f"⚠️ تراکنش {int(tx_id)} ممکن است پیش از قطع ارتباط روی پنل اعمال شده باشد. "
+            "تکرار می‌تواند روزهای اعتبار یا حجم را دوباره اضافه کند. "
+            "ابتدا سهمیه و تاریخ انقضای سرویس را در پنل بررسی کنید و فقط اگر عملیات اعمال نشده، تکرار را تأیید کنید.",
+            reply_markup=markup,
+        )
+        return
+    changed = conn.execute(
+        "UPDATE transactions SET status = 'PROCESSING', last_error = NULL WHERE id = ? AND status='ISSUE'", (tx_id,),
+    ).rowcount
     conn.commit()
     conn.close()
+    if not changed:
+        bot.answer_callback_query(call.id, "تراکنش قبلاً برای اجرا ثبت شده است.", show_alert=True)
+        return
     bot.answer_callback_query(call.id, "Retry شروع شد...")
     finalize_service_transaction(tx_id)
 
@@ -3841,10 +3920,10 @@ def process_admin_backup_restore(message):
         bot.register_next_step_handler(message, process_admin_backup_restore)
         return
 
-    if doc.file_size > 50 * 1024 * 1024:
+    if int(doc.file_size or 0) > 20 * 1024 * 1024:
         bot.send_message(
             admin_chat,
-            "❌ حجم فایل ارسالی بیش از ۵۰ مگابایت است و از طریق تلگرام قابل دانلود نیست.\n"
+            "❌ حجم فایل ارسالی بیش از ۲۰ مگابایت است و از طریق API عمومی تلگرام قابل دانلود نیست.\n"
             "لطفاً با انتقال فایل به سرور، از طریق دستور <code>./restore.sh</code> روی سرور اقدام به بازیابی فرمایید.",
             parse_mode="HTML",
             reply_markup=main_menu()
@@ -3854,7 +3933,7 @@ def process_admin_backup_restore(message):
     status_msg = bot.send_message(admin_chat, "⏳ در حال دانلود و اعتبارسنجی فایل پشتیبان...")
     temp_dir = Path("backups") / "restore_temp"
     temp_dir.mkdir(parents=True, exist_ok=True)
-    temp_file = temp_dir / f"uploaded-{int(time.time())}.db"
+    temp_file = temp_dir / f"uploaded-{time.time_ns()}-{secrets.token_hex(4)}.db"
 
     try:
         file_info = bot.get_file(doc.file_id)
@@ -3992,6 +4071,10 @@ def _xui_response_error(response, action):
     status = getattr(response, "status_code", "?")
     url = getattr(response, "url", "")
     body = (getattr(response, "text", "") or "").strip()
+    token = get_xui_bearer_token()
+    if token:
+        body = body.replace(token, "[REDACTED]")
+        url = str(url).replace(token, "[REDACTED]")
     if len(body) > 500:
         body = body[:500] + "…"
     if not body:
@@ -4021,9 +4104,24 @@ def _xui_proxies():
 
 def _safe_json(response):
     try:
-        return response.json()
+        data = response.json()
+        return data if isinstance(data, dict) else {}
     except Exception:
         return {}
+
+
+def _normalize_client_data(payload):
+    """Flatten current {client, inboundIds, ...} and legacy flat responses."""
+    if not isinstance(payload, dict):
+        return {}
+    nested = payload.get('client')
+    if isinstance(nested, dict):
+        client = dict(nested)
+        for key in ('inboundIds', 'externalLinks', 'traffic', 'usedTraffic', 'tunnelAllowedIPs'):
+            if key in payload:
+                client[key] = payload[key]
+        return client
+    return dict(payload)
 
 
 def _get_active_inbound_details(headers, request_proxies):
@@ -4066,7 +4164,9 @@ def _get_client_data(user_email, headers, request_proxies):
     )
     data = _safe_json(response)
     if response.status_code == 200 and data.get("success"):
-        return data.get("obj", {}) or {}
+        return _normalize_client_data(data.get("obj"))
+    if response.status_code != 200 or 'success' not in data:
+        raise RuntimeError(_xui_response_error(response, "خطا در دریافت کلاینت از پنل"))
     return {}
 
 
@@ -4106,7 +4206,8 @@ def _get_delivery_links(user_email, sub_id, headers, request_proxies):
 def _extract_subscription_id(client_data, config_links=None):
     # طبق API رسمی، لینک Subscription فقط باید از subId ساخته شود.
     # UUID/ID کلاینت جایگزین معتبر subId نیست.
-    sub_id = (client_data or {}).get("subId") or (client_data or {}).get("subid")
+    client_data = _normalize_client_data(client_data)
+    sub_id = client_data.get("subId") or client_data.get("subid")
     return str(sub_id) if sub_id else None
 
 
@@ -4168,7 +4269,7 @@ def _xui_assign_group_bulk(emails, group_name):
     if response.status_code != 200 or not data.get('success'):
         raise RuntimeError(_xui_response_error(response, f"خطا در افزودن کلاینت‌ها به Group {group_name}"))
     obj = data.get('obj') or {}
-    return int(obj.get('affected') or len(set(emails)))
+    return int(obj.get('affected', 0))
 
 
 def _xui_assign_group(email, group_name):
@@ -4213,28 +4314,15 @@ def reconcile_service_groups():
 
 
 def _get_exported_client(email):
-    response = requests.get(
-        _xui_url("panel/api/clients/export"), headers=_xui_headers(), proxies=_xui_proxies(), timeout=20, verify=not DEVELOPMENT_MODE
-    )
-    data = _safe_json(response)
-    if response.status_code != 200 or not data.get('success'):
-        raise RuntimeError(_xui_response_error(response, "خطا در Export کلاینت‌ها"))
-    for item in data.get('obj', []) or []:
-        client = item.get('client') or {}
-        if str(client.get('email')) == str(email):
-            return client, item.get('inboundIds', []) or []
-    return None, []
+    # Read only the requested account, not every customer's secrets via export.
+    client = _get_client_data(email, _xui_headers(), _xui_proxies())
+    return (client or None), (client.get('inboundIds') or [])
 
 
 def _update_exported_client(email, changes):
-    client, _ = _get_exported_client(email)
-    if not client:
-        raise RuntimeError(f"کلاینت {email} در پنل پیدا نشد.")
-    payload = dict(client)
-    payload.update(changes)
-    # traffic/inbound metadata are not part of the client update body.
-    for key in ('traffic', 'inboundIds', 'clientStats'):
-        payload.pop(key, None)
+    # Current API preserves omitted fields. Replaying an exported record could
+    # overwrite concurrent credential/device/group changes and protocol flows.
+    payload = dict(changes)
     response = requests.post(
         _xui_url(f"panel/api/clients/update/{quote(str(email), safe='')}"),
         json=payload, headers=_xui_headers(), proxies=_xui_proxies(), timeout=20, verify=not DEVELOPMENT_MODE
@@ -4295,6 +4383,9 @@ def add_volume_xui_service(user_email, volume_gb):
     data = _safe_json(response)
     if response.status_code != 200 or not data.get('success'):
         raise RuntimeError(_xui_response_error(response, "خطا در افزودن حجم"))
+    result = data.get('obj')
+    if not isinstance(result, dict) or int(result.get('adjusted') or 0) != 1 or result.get('skipped'):
+        raise RuntimeError("پنل افزایش حجم را برای این سرویس اعمال نکرد؛ نتیجهٔ bulkAdjust را بررسی کنید.")
     return True
 
 
@@ -4529,7 +4620,7 @@ def _send_transaction_success(tx_id, sub_id=None, config_links=None):
 
 
 def finalize_service_transaction(tx_id, admin_message_id=None, admin_chat_id=None):
-    """Fulfil NEW / RENEWAL / VOLUME transactions idempotently, then settle rewards."""
+    """Fulfil transactions, preserving uncertain remote writes for admin review."""
     conn = _db_connect()
     tx = conn.execute("SELECT * FROM transactions WHERE id = ?", (int(tx_id),)).fetchone()
     conn.close()
@@ -4565,7 +4656,8 @@ def finalize_service_transaction(tx_id, admin_message_id=None, admin_chat_id=Non
         )
         conn.commit(); conn.close()
         admin_markup = types.InlineKeyboardMarkup(row_width=2)
-        admin_markup.add(types.InlineKeyboardButton("🔄 Retry", callback_data=f"admin:retry:{tx_id}"))
+        retry_label = "🔄 Retry" if kind == 'NEW' else "بررسی پنل سپس تکرار"
+        admin_markup.add(types.InlineKeyboardButton(retry_label, callback_data=f"admin:retry:{tx_id}"))
         # بازپرداخت خودکار فقط برای خرید NEW امن است؛ در تمدید/حجم اضافه ممکن است بخشی از عملیات روی پنل اعمال شده باشد.
         if tx['payment_method'] == 'WALLET' and kind == 'NEW':
             admin_markup.add(types.InlineKeyboardButton("↩️ بازپرداخت کیف پول", callback_data=f"admin:refund_wallet:{tx_id}"))
@@ -4626,11 +4718,29 @@ def recover_processing_transactions():
     """Recover transactions left in PROCESSING if the bot/server restarted mid-provisioning."""
     conn = _db_connect()
     rows = conn.execute(
-        "SELECT id FROM transactions WHERE status = 'PROCESSING' ORDER BY id ASC LIMIT 25"
+        "SELECT id, kind FROM transactions WHERE status = 'PROCESSING' ORDER BY id ASC LIMIT 25"
     ).fetchall()
     conn.close()
     for row in rows:
         try:
+            if (row['kind'] or 'NEW') in ('RENEWAL', 'VOLUME'):
+                reason = "اجرای تراکنش هنگام راه‌اندازی قبلی قطع شد؛ پیش از تکرار، اعمال حجم/تمدید را در پنل بررسی کنید."
+                conn = _db_connect()
+                try:
+                    changed = conn.execute(
+                        "UPDATE transactions SET status='ISSUE', last_error=? WHERE id=? AND status='PROCESSING'",
+                        (reason, int(row['id'])),
+                    ).rowcount
+                    conn.commit()
+                finally:
+                    conn.close()
+                if changed:
+                    markup = types.InlineKeyboardMarkup()
+                    markup.add(types.InlineKeyboardButton(
+                        "بررسی پنل سپس تکرار", callback_data=f"admin:retry:{int(row['id'])}",
+                    ))
+                    notify_admins(f"⚠️ تراکنش {int(row['id'])} نیازمند بررسی دستی است. {reason}", reply_markup=markup)
+                continue
             finalize_service_transaction(int(row['id']))
         except Exception as e:
             try:

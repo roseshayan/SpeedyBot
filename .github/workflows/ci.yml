@@ -2,40 +2,45 @@ name: SpeedyBot CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'codex/**']
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   syntax:
+    name: syntax (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13', '3.14', '3.15']
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: '3.12'
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install release dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip check
       - name: Python syntax
-        run: python -m py_compile main.py restore.py speedybot/*.py
+        run: python -m compileall -q main.py restore.py speedybot tests
       - name: Unit tests
         run: python -m unittest discover -s tests -v
       - name: Shell syntax
-        run: |
-          bash -n install.sh
-          bash -n update.sh
-          bash -n restore.sh
-      - name: Integrated layout
-        run: |
-          test -f main.py
-          test -f speedybot/core.py
-          test -f speedybot/admin_tools.py
-          test -f speedybot/admin_ux.py
-          test ! -e app.py
-          test ! -e speedybot_v4
-      - name: Version file
-        run: |
-          test "$(cat VERSION.txt)" = "4.3.0"
-          python -c 'import speedybot; assert speedybot.VERSION == "4.3.0"'
+        run: for script in install.sh update.sh restore.sh; do bash -n "$script"; done
+      - name: Deployment and rollback regression tests
+        if: matrix.python-version == '3.12'
+        run: bash tests/test_update_shell.sh
+      - name: Version consistency
+        run: python -c "from pathlib import Path; import speedybot; assert speedybot.VERSION == Path('VERSION.txt').read_text().strip()"

@@ -214,7 +214,7 @@ def callback(call):
             parse_mode="HTML",
             reply_markup=C.CORE.back_menu(),
         )
-        C.BOT.register_next_step_handler(msg, _trial_defaults_save, actor)
+        C.register_admin_step(msg, _trial_defaults_save, actor, actor)
         return
 
     if action == "delete":
@@ -229,7 +229,7 @@ def callback(call):
             "🗑 ID پلان را بفرستید.\nاگر پلان سابقه تراکنش داشته باشد برای حفظ تاریخچه حذف نخواهد شد.",
             reply_markup=C.CORE.back_menu(),
         )
-        C.BOT.register_next_step_handler(msg, _plan_delete, actor)
+        C.register_admin_step(msg, _plan_delete, actor, actor)
         return
 
     if action == "category_delete":
@@ -239,7 +239,7 @@ def callback(call):
             "🗑 ID دسته‌بندی را بفرستید. پلان‌های داخل آن قبل از حذف به یک دسته دیگر منتقل می‌شوند.",
             reply_markup=C.CORE.back_menu(),
         )
-        C.BOT.register_next_step_handler(msg, _category_delete, actor)
+        C.register_admin_step(msg, _category_delete, actor, actor)
         return
 
 

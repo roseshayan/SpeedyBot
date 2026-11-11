@@ -9,8 +9,6 @@ Usage:
 """
 
 import argparse
-from datetime import datetime
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -20,7 +18,7 @@ ROOT_DIR = Path(__file__).resolve().parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from speedybot import backup_manager, env_manager
+from speedybot import backup_manager
 
 
 def check_service_status(service_name="xui-bot.service"):
@@ -29,13 +27,20 @@ def check_service_status(service_name="xui-bot.service"):
         return False
     try:
         res = subprocess.run(
-            ["systemctl", "is-active", "--quiet", service_name],
-            stdout=subprocess.DEVNULL,
+            ["systemctl", "is-active", service_name],
+            stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=30,
         )
-        return res.returncode == 0
-    except Exception:
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError(f"Cannot determine bot service status: {exc}") from exc
+    state = str(getattr(res, "stdout", "") or "").strip()
+    if res.returncode == 0 or state in ("activating", "reloading", "deactivating"):
+        return True
+    if res.returncode in (3, 4):  # inactive or service not installed
         return False
+    raise RuntimeError(f"Cannot determine bot service status (systemctl exit {res.returncode})")
 
 
 def restart_service(service_name="xui-bot.service"):
@@ -43,11 +48,52 @@ def restart_service(service_name="xui-bot.service"):
     if not sys.platform.startswith("linux"):
         return False
     try:
-        subprocess.run(["systemctl", "restart", service_name], check=True)
+        subprocess.run(["systemctl", "restart", service_name], check=True, timeout=60)
         return True
     except Exception as e:
         print(f"[WARN] Failed to restart service {service_name}: {e}")
         return False
+
+
+def restore_with_service_control(backup_path, target_db):
+    """Quiesce the installed bot while replacing its database, then resume it.
+
+    Restoring a separate --target file must not interrupt the installed service.
+    Migrations run through the normal bot startup, with its real configuration.
+    """
+    installed_db = ROOT_DIR / "speedping.db"
+    try:
+        service_active = (
+            Path(target_db).resolve() == installed_db.resolve()
+            and check_service_status()
+        )
+    except RuntimeError as exc:
+        return False, f"{exc}; database was not changed.", {}, None
+    if service_active:
+        print("[INFO] Stopping xui-bot.service before restoring its database ...")
+        try:
+            subprocess.run(
+                ["systemctl", "stop", "xui-bot.service"], check=True, timeout=60
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            return False, f"Cannot stop the bot service; database was not changed: {exc}", {}, None
+
+    restarted = True
+    try:
+        result = backup_manager.restore_database_from_file(
+            backup_path, target_db=target_db, pre_restore_backup=True
+        )
+    finally:
+        if service_active:
+            print("[INFO] Restarting xui-bot.service ...")
+            restarted = restart_service()
+
+    if not restarted:
+        return False, (
+            f"{result[1]} Service restart failed; inspect the service logs and run "
+            "systemctl restart xui-bot.service."
+        ), result[2], result[3]
+    return result
 
 
 def format_size(bytes_num):
@@ -59,13 +105,13 @@ def format_size(bytes_num):
     return f"{bytes_num / (1024 * 1024):.2f} MB"
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="SpeedyBot SQLite Database Restore Utility")
     parser.add_argument("backup_file", nargs="?", default=None, help="Path to SQLite backup (.db) file")
     parser.add_argument("--latest", action="store_true", help="Restore the latest available backup automatically")
     parser.add_argument("-y", "--yes", action="store_true", help="Confirm restoration without interactive prompt")
-    parser.add_argument("--target", default="speedping.db", help="Target SQLite database file (default: speedping.db)")
-    args = parser.parse_args()
+    parser.add_argument("--target", default=str(ROOT_DIR / "speedping.db"), help="Target SQLite file (default: speedping.db beside restore.py)")
+    args = parser.parse_args(argv)
 
     target_db = args.target
     backup_file_path = args.backup_file
@@ -77,7 +123,7 @@ def main():
 
     # 1. Determine backup file
     if args.latest:
-        backups = backup_manager.list_available_backups("backups")
+        backups = backup_manager.list_available_backups(str(ROOT_DIR / "backups"))
         if not backups:
             print("[ERROR] No backups found in backups/ directory.")
             print("[خطا] هیچ فایل بکاپی در مسیر backups یافت نشد.")
@@ -86,7 +132,7 @@ def main():
         print(f"[INFO] Selected latest backup: {backup_file_path}")
 
     elif not backup_file_path:
-        backups = backup_manager.list_available_backups("backups")
+        backups = backup_manager.list_available_backups(str(ROOT_DIR / "backups"))
         if not backups:
             print("[WARN] No backups found in backups/ directory.")
             print("لطفاً مسیر فایل بکاپ را به صورت مستقیم وارد نمایید:")
@@ -149,17 +195,10 @@ def main():
             print("Restoration cancelled.")
             sys.exit(0)
 
-    # 4. Check service status
-    service_active = check_service_status("xui-bot.service")
-    if service_active:
-        print("[INFO] Bot service 'xui-bot.service' is running.")
-
-    # 5. Perform restoration
+    # Stop the installed service while replacing its database.
     print(f"\n[INFO] Restoring database into {target_db} ...")
-    success, res_msg, restored_stats, safety_path = backup_manager.restore_database_from_file(
-        backup_file_path,
-        target_db=target_db,
-        pre_restore_backup=True,
+    success, res_msg, restored_stats, safety_path = restore_with_service_control(
+        backup_file_path, target_db
     )
 
     if not success:
@@ -172,24 +211,8 @@ def main():
     if safety_path:
         print(f"[INFO] Pre-restore safety snapshot created at:\n       {safety_path}")
 
-    # 6. Run package schema migrations
-    try:
-        from speedybot import storage
-        storage.init_db()
-        print("[OK] Schema migrations verified.")
-    except Exception as e:
-        print(f"[WARN] Schema migration check notice: {e}")
-
-    # 7. Restart service if needed
-    if service_active:
-        print("[INFO] Restarting xui-bot.service ...")
-        if restart_service("xui-bot.service"):
-            print("[OK] Service restarted successfully.")
-        else:
-            print("[WARN] Please restart the service manually: systemctl restart xui-bot.service")
-    else:
-        print("\n[HINT] You can now start the bot using:")
-        print("       ./run.sh  OR  systemctl start xui-bot.service")
+    print("[INFO] Schema migrations are applied when the bot starts with this database.")
+    print("[HINT] Start the installed bot with ./run.sh or systemctl start xui-bot.service.")
 
     print("\nRestore operation completed.")
 

@@ -4,7 +4,7 @@ import sqlite3
 import tempfile
 import unittest
 
-from speedybot import context as C, corepatch, linked_services, storage, updates
+from speedybot import context as C, corepatch, linked_services, storage, trial, updates
 
 
 class FakeTypes:
@@ -141,6 +141,26 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(storage.audiences("customers"), [10])
         self.assertEqual(storage.audiences("expired_trial"), [20])
         self.assertEqual(set(storage.audiences("never_bought")), {20, 30})
+
+    def test_all_audience_segments_exclude_deactivated_users(self):
+        con = sqlite3.connect("speedping.db")
+        con.execute("UPDATE users SET is_active=0 WHERE id IN (10,20)")
+        con.commit()
+        con.close()
+        for audience in ("all", "customers", "trial", "expired_trial", "never_bought"):
+            self.assertTrue(set(storage.audiences(audience)).isdisjoint({10, 20}), audience)
+
+    def test_startup_recovers_only_interrupted_trial_issuance(self):
+        con = sqlite3.connect("speedping.db")
+        con.execute("INSERT INTO trial_services(user_id,status) VALUES (30,'CREATING')")
+        con.commit()
+        con.close()
+        self.assertEqual(trial.recover_interrupted(), 1)
+        con = sqlite3.connect("speedping.db")
+        rows = dict(con.execute("SELECT user_id,status FROM trial_services"))
+        con.close()
+        self.assertEqual(rows, {20: "EXPIRED", 30: "FAILED"})
+        self.assertEqual(trial.recover_interrupted(), 0)
 
     def test_style_and_custom_emoji_payload(self):
         C.set_setting("ui_style_buy", "success")

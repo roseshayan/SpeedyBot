@@ -10,12 +10,20 @@ class FakeBot:
     def __init__(self):
         self.cleared = []
         self.answered = []
+        self.steps = []
+        self.sent = []
 
     def clear_step_handler_by_chat_id(self, chat_id):
         self.cleared.append(int(chat_id))
 
     def answer_callback_query(self, callback_id, *args, **kwargs):
         self.answered.append(str(callback_id))
+
+    def register_next_step_handler(self, message, handler, *args):
+        self.steps.append((message, handler, args))
+
+    def send_message(self, *args, **kwargs):
+        self.sent.append((args, kwargs))
 
 
 class FakeCore:
@@ -61,6 +69,33 @@ class AdminUXTests(unittest.TestCase):
         admin_ux.state_guard(call)
         admin_ux.state_guard(call)
         self.assertEqual(self.core.bot.cleared, [100, 100])
+
+    def test_customization_navigation_clears_stale_wizard(self):
+        call = self.call("custom:panel")
+        self.assertTrue(admin_ux._is_admin_navigation(call))
+        admin_ux.state_guard(call)
+        self.assertEqual(self.core.bot.cleared, [100])
+
+    def test_admin_step_ignores_other_group_member_and_preserves_step(self):
+        calls = []
+        origin = SimpleNamespace(chat=SimpleNamespace(id=100))
+        C.register_admin_step(origin, lambda message, value: calls.append(value), 1, "saved")
+        _, handler, args = self.core.bot.steps[-1]
+        handler(SimpleNamespace(chat=SimpleNamespace(id=100), from_user=SimpleNamespace(id=2)), *args)
+        self.assertEqual(calls, [])
+        self.assertEqual(len(self.core.bot.steps), 2)
+        handler(SimpleNamespace(chat=SimpleNamespace(id=100), from_user=SimpleNamespace(id=1)), *args)
+        self.assertEqual(calls, ["saved"])
+
+    def test_admin_step_rechecks_revoked_access(self):
+        calls = []
+        origin = SimpleNamespace(chat=SimpleNamespace(id=100))
+        C.register_admin_step(origin, lambda message: calls.append(message), 1)
+        _, handler, args = self.core.bot.steps[-1]
+        self.core.is_admin = lambda uid: False
+        handler(SimpleNamespace(chat=SimpleNamespace(id=100), from_user=SimpleNamespace(id=1)), *args)
+        self.assertEqual(calls, [])
+        self.assertTrue(self.core.bot.sent)
 
 
 if __name__ == "__main__":

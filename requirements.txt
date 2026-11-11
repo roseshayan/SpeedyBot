@@ -1,3 +1,5 @@
-pyTelegramBotAPI>=4.37.0,<5
-requests>=2.34.2,<3
-qrcode[pil]>=8.2,<9
+# Release baseline checked against PyPI on 2026-11-11. Python 3.11+.
+pyTelegramBotAPI==4.37.1
+requests==2.34.2
+qrcode[pil]==8.2
+Pillow==13.0.0

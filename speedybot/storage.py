@@ -98,9 +98,9 @@ def audiences(code):
     c = db()
     sql = {
         "all": "SELECT id FROM users WHERE is_active=1",
-        "customers": "SELECT DISTINCT user_id FROM transactions WHERE status='APPROVED' AND kind='NEW'",
-        "trial": "SELECT DISTINCT t.user_id FROM trial_services t WHERE NOT EXISTS(SELECT 1 FROM transactions x WHERE x.user_id=t.user_id AND x.status='APPROVED' AND x.kind='NEW')",
-        "expired_trial": "SELECT DISTINCT t.user_id FROM trial_services t WHERE t.status='EXPIRED' AND NOT EXISTS(SELECT 1 FROM transactions x WHERE x.user_id=t.user_id AND x.status='APPROVED' AND x.kind='NEW')",
+        "customers": "SELECT DISTINCT t.user_id FROM transactions t JOIN users u ON u.id=t.user_id WHERE u.is_active=1 AND t.status='APPROVED' AND t.kind='NEW'",
+        "trial": "SELECT DISTINCT t.user_id FROM trial_services t JOIN users u ON u.id=t.user_id WHERE u.is_active=1 AND NOT EXISTS(SELECT 1 FROM transactions x WHERE x.user_id=t.user_id AND x.status='APPROVED' AND x.kind='NEW')",
+        "expired_trial": "SELECT DISTINCT t.user_id FROM trial_services t JOIN users u ON u.id=t.user_id WHERE u.is_active=1 AND t.status='EXPIRED' AND NOT EXISTS(SELECT 1 FROM transactions x WHERE x.user_id=t.user_id AND x.status='APPROVED' AND x.kind='NEW')",
         "never_bought": "SELECT u.id FROM users u WHERE u.is_active=1 AND NOT EXISTS(SELECT 1 FROM transactions x WHERE x.user_id=u.id AND x.status='APPROVED' AND x.kind='NEW')",
     }.get(code)
     rows = c.execute(sql).fetchall() if sql else []

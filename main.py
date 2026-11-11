@@ -1,6 +1,6 @@
 """SpeedyBot production entrypoint.
 
-SpeedyBot v4 is a single integrated application. The business core and the
+SpeedyBot is a single integrated application. The business core and the
 Control Center live in the ``speedybot`` package; this file is the canonical
 runtime entrypoint used by systemd, manual runs, installation and updates.
 """
@@ -10,6 +10,8 @@ import speedybot
 
 def run():
     speedybot.install(core)
+    from speedybot import trial
+    trial.recover_interrupted()
     print(f"SpeedyBot {speedybot.VERSION} is running...")
     core.bot.remove_webhook()
     core.recover_processing_transactions()

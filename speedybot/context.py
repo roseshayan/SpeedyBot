@@ -1,5 +1,6 @@
 from __future__ import annotations
 import sqlite3, time
+from functools import wraps
 from html import escape
 from typing import Any, Dict, Optional, Tuple
 
@@ -48,6 +49,28 @@ def menu_visible(key: str, default: str = "1") -> bool:
 def is_admin(uid: int) -> bool:
     try: return bool(CORE.is_admin(int(uid)))
     except Exception: return False
+
+
+def register_admin_step(message, handler, actor, *args):
+    """Bind a chat-based next step to the admin who started the operation."""
+    actor = int(actor)
+    chat_id = int(message.chat.id)
+
+    @wraps(handler)
+    def guarded(reply_message, *handler_args):
+        sender = getattr(getattr(reply_message, "from_user", None), "id", None)
+        reply_chat = getattr(getattr(reply_message, "chat", None), "id", None)
+        if not is_admin(actor):
+            BOT.send_message(chat_id, "❌ دسترسی مدیریت این عملیات منقضی شده است.")
+            return
+        if sender != actor or reply_chat != chat_id:
+            # TeleBot consumes next steps by chat, including messages from other
+            # group members. Preserve the original admin's pending operation.
+            BOT.register_next_step_handler(message, guarded, *handler_args)
+            return
+        return handler(reply_message, *handler_args)
+
+    BOT.register_next_step_handler(message, guarded, *args)
 
 def blocked(uid: int) -> Tuple[bool, str]:
     c=db(); r=c.execute("SELECT reason FROM user_blocks WHERE user_id=? AND active=1",(int(uid),)).fetchone(); c.close()

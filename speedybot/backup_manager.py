@@ -8,10 +8,15 @@ from datetime import datetime
 import os
 from pathlib import Path
 import sqlite3
+import tempfile
 from typing import Any, Dict, List, Optional, Tuple
 
 
 REQUIRED_TABLES = {"users", "settings", "plans"}
+
+
+def _readonly_connection(path, timeout=30):
+    return sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True, timeout=timeout)
 
 
 def validate_database_file(db_path: str) -> Tuple[bool, str, Dict[str, Any]]:
@@ -29,7 +34,7 @@ def validate_database_file(db_path: str) -> Tuple[bool, str, Dict[str, Any]]:
 
     conn = None
     try:
-        conn = sqlite3.connect(str(path), timeout=15)
+        conn = _readonly_connection(path, timeout=15)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -104,18 +109,26 @@ def create_safety_snapshot(
     if not src_path.is_file():
         return None
 
-    target_root = Path(dest_dir) if dest_dir else Path("backups") / prefix
+    target_root = Path(dest_dir) if dest_dir else src_path.parent / "backups" / prefix
     target_root.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    target_file = target_root / f"speedping-{prefix}-{stamp}.db"
+    fd, target_name = tempfile.mkstemp(prefix=f"speedping-{prefix}-{stamp}-", suffix=".db", dir=target_root)
+    os.close(fd)
+    target_file = Path(target_name)
 
-    src_conn = sqlite3.connect(str(src_path), timeout=30)
-    dst_conn = sqlite3.connect(str(target_file))
     try:
-        src_conn.backup(dst_conn)
-    finally:
-        dst_conn.close()
-        src_conn.close()
+        src_conn = _readonly_connection(src_path)
+        try:
+            dst_conn = sqlite3.connect(str(target_file))
+            try:
+                src_conn.backup(dst_conn)
+            finally:
+                dst_conn.close()
+        finally:
+            src_conn.close()
+    except Exception:
+        target_file.unlink(missing_ok=True)
+        raise
 
     return str(target_file)
 
@@ -135,6 +148,12 @@ def restore_database_from_file(
     Returns:
         (success, message, restored_stats, safety_snapshot_path)
     """
+    # SQLite's backup API cannot copy a database onto itself.
+    source = Path(backup_path).resolve()
+    target = Path(target_db).resolve()
+    if source == target or (target.exists() and source.exists() and os.path.samefile(source, target)):
+        return False, "فایل پشتیبان و دیتابیس مقصد باید متفاوت باشند.", {}, None
+
     # 1. Validate source backup first
     valid, val_msg, stats = validate_database_file(backup_path)
     if not valid:
@@ -150,12 +169,14 @@ def restore_database_from_file(
 
     # 3. Perform atomic online page-level restore
     try:
-        src_conn = sqlite3.connect(backup_path, timeout=30)
-        dst_conn = sqlite3.connect(target_db, timeout=30)
+        src_conn = _readonly_connection(backup_path)
         try:
-            src_conn.backup(dst_conn)
+            dst_conn = sqlite3.connect(target_db, timeout=30)
+            try:
+                src_conn.backup(dst_conn)
+            finally:
+                dst_conn.close()
         finally:
-            dst_conn.close()
             src_conn.close()
 
         # Checkpoint WAL if present
@@ -170,14 +191,8 @@ def restore_database_from_file(
     except Exception as exc:
         return False, f"خطا در بازنویسی صفحات دیتابیس: {exc}", {}, safety_path
 
-    # 4. Remove leftover disconnected WAL files if any
-    for ext in ("-wal", "-shm"):
-        wal_file = Path(f"{target_db}{ext}")
-        if wal_file.is_file():
-            try:
-                wal_file.unlink()
-            except Exception:
-                pass
+    # SQLite owns WAL/SHM lifetime. Other live connections may still need them;
+    # unlinking these files here can discard committed data or split readers.
 
     # 5. Verify restored database
     restored_valid, restored_msg, restored_stats = validate_database_file(target_db)

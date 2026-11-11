@@ -1,50 +1,23 @@
 import os
 import sqlite3
-import sys
 import tempfile
 import unittest
+from contextlib import closing
+from unittest.mock import Mock, patch
 
-try:
-    import telebot
-except ImportError:
-    class MockTelebot:
-        class TeleBot:
-            def __init__(self, *args, **kwargs):
-                self.message_handlers = []
-                self.callback_query_handlers = []
-            def message_handler(self, *args, **kwargs):
-                def decorator(fn): return fn
-                return decorator
-            def callback_query_handler(self, *args, **kwargs):
-                def decorator(fn): return fn
-                return decorator
-            def register_next_step_handler(self, *args, **kwargs): pass
-            def send_message(self, *args, **kwargs): pass
-            def send_photo(self, *args, **kwargs): pass
-            def remove_webhook(self, *args, **kwargs): pass
-            def answer_callback_query(self, *args, **kwargs): pass
-        class types:
-            class InlineKeyboardMarkup:
-                def __init__(self, *args, **kwargs): pass
-                def add(self, *args, **kwargs): pass
-                def row(self, *args, **kwargs): pass
-            class InlineKeyboardButton:
-                def __init__(self, *args, **kwargs): self.kwargs = kwargs
-            class ReplyKeyboardMarkup:
-                def __init__(self, *args, **kwargs): pass
-                def row(self, *args, **kwargs): pass
-            class KeyboardButton:
-                def __init__(self, *args, **kwargs): self.kwargs = kwargs
-            class Message:
-                pass
-        class apihelper:
-            pass
-    m = MockTelebot()
-    sys.modules['telebot'] = m
-    sys.modules['telebot.types'] = m.types
-    sys.modules['telebot.apihelper'] = m.apihelper
+from speedybot import env_manager
 
-from speedybot import env_manager, core
+
+# Exercise the real Telegram library without production credentials or an
+# import-time migration against the developer's database / .env file.
+_import_cwd = os.getcwd()
+with tempfile.TemporaryDirectory() as _import_dir:
+    with patch.dict(os.environ, {"BOT_TOKEN": "12345:TEST_TOKEN", "ADMIN_ID": "123456789"}):
+        try:
+            os.chdir(_import_dir)
+            from speedybot import core
+        finally:
+            os.chdir(_import_cwd)
 
 
 class FakeMessage:
@@ -66,6 +39,15 @@ class XuiAndCardTests(unittest.TestCase):
         self.old_cwd = os.getcwd()
         self.tmp = tempfile.TemporaryDirectory()
         os.chdir(self.tmp.name)
+        env_patch = patch.dict(os.environ)
+        env_patch.start()
+        self.addCleanup(env_patch.stop)
+        config_patch = patch.multiple(
+            core, XUI_API_URL="", XUI_BASE_PATH="", XUI_BEARER_TOKEN="",
+            XUI_SUB_SERVER_URL="", XUI_SUB_PATH="/sub/",
+        )
+        config_patch.start()
+        self.addCleanup(config_patch.stop)
         
         # Setup temporary sqlite database
         con = sqlite3.connect("speedping.db")
@@ -174,6 +156,236 @@ class XuiAndCardTests(unittest.TestCase):
             env_txt = f.read()
         self.assertIn("speed-ping.shop", env_txt)
         self.assertNotIn("speed-ping.com", env_txt)
+
+    def test_nested_client_response_preserves_identity_and_membership(self):
+        core.update_db_setting("xui_api_url", "https://panel.example.com")
+        response = Mock(status_code=200)
+        response.json.return_value = {"success": True, "obj": {
+            "client": {"email": "alice+one@example.com", "subId": "subscription", "totalGB": 1024},
+            "inboundIds": [7, 9], "usedTraffic": 128,
+        }}
+        with patch.object(core.requests, "get", return_value=response) as get:
+            client = core._get_client_data("alice+one@example.com", {}, None)
+        self.assertEqual(client["totalGB"], 1024)
+        self.assertEqual(client["inboundIds"], [7, 9])
+        self.assertEqual(core._extract_subscription_id(client), "subscription")
+        self.assertIn("alice%2Bone%40example.com", get.call_args.args[0])
+        self.assertEqual(core._normalize_client_data({"email": "legacy"}), {"email": "legacy"})
+
+    def test_safe_json_rejects_non_object_envelopes(self):
+        for value in (None, [], "unexpected", 7):
+            response = Mock()
+            response.json.return_value = value
+            self.assertEqual(core._safe_json(response), {})
+
+    def test_update_sends_only_changed_fields(self):
+        core.update_db_setting("xui_api_url", "https://panel.example.com")
+        response = Mock(status_code=200)
+        response.json.return_value = {"success": True}
+        with patch.object(core.requests, "post", return_value=response) as post:
+            with patch.object(core.requests, "get") as get:
+                self.assertTrue(core._update_exported_client("alice", {"totalGB": 0, "enable": True}))
+        self.assertEqual(post.call_args.kwargs["json"], {"totalGB": 0, "enable": True})
+        get.assert_not_called()
+
+    def test_topup_rejects_skipped_bulk_result(self):
+        core.update_db_setting("xui_api_url", "https://panel.example.com")
+        response = Mock(status_code=200)
+        with patch.object(core, "_get_client_data", return_value={"totalGB": 1024}):
+            with patch.object(core.requests, "post", return_value=response):
+                response.json.return_value = {"success": True, "obj": {
+                    "adjusted": 0, "skipped": [{"email": "alice", "reason": "client not found"}],
+                }}
+                with self.assertRaises(RuntimeError):
+                    core.add_volume_xui_service("alice", 1)
+                response.json.return_value = {"success": True, "obj": {"adjusted": 1, "skipped": []}}
+                self.assertTrue(core.add_volume_xui_service("alice", 1))
+
+    def test_failed_client_lookup_is_not_treated_as_missing_account(self):
+        core.update_db_setting("xui_api_url", "https://panel.example.com")
+        response = Mock(status_code=403, text="Forbidden", url="https://panel.example.com")
+        response.json.return_value = {"success": False}
+        with patch.object(core.requests, "get", return_value=response):
+            with self.assertRaises(RuntimeError):
+                core._get_client_data("alice", {}, None)
+
+    def test_new_protocol_share_links_survive_filtering(self):
+        from speedybot import corepatch
+        links = ["tuic://user:password@example.com:443", "tg://proxy?server=example.com&port=443&secret=123"]
+        self.assertEqual(core._clean_proxy_links(links), links)
+        self.assertEqual(corepatch._decode_subscription_text("\n".join(links)), links)
+
+    def test_zero_group_affected_count_is_not_reported_as_successful_updates(self):
+        core.update_db_setting("xui_api_url", "https://panel.example.com")
+        response = Mock(status_code=200)
+        response.json.return_value = {"success": True, "obj": {"affected": 0}}
+        with patch.object(core, "_xui_ensure_group", return_value=True):
+            with patch.object(core.requests, "post", return_value=response):
+                self.assertEqual(core._xui_assign_group_bulk(["alice"], "Customers"), 0)
+
+    def test_error_diagnostics_redact_token(self):
+        core.update_db_setting("xui_bearer_token", "private-token")
+        response = Mock(status_code=403, text="private-token rejected", url="https://panel/private-token")
+        error = core._xui_response_error(response, "read")
+        self.assertNotIn("private-token", error)
+        self.assertIn("[REDACTED]", error)
+
+    def test_ownership_covers_paid_trial_and_linked_accounts(self):
+        con = sqlite3.connect("speedping.db")
+        con.execute("CREATE TABLE trial_services(user_id INTEGER, email TEXT, status TEXT)")
+        con.execute("CREATE TABLE linked_services(user_id INTEGER, email TEXT)")
+        con.execute("INSERT INTO transactions(user_id,service_email,status) VALUES (1,'paid','APPROVED')")
+        con.execute("INSERT INTO transactions(user_id,service_email,status) VALUES (1,'pending','PENDING')")
+        con.execute("INSERT INTO trial_services VALUES (1,'trial','ACTIVE')")
+        con.execute("INSERT INTO linked_services VALUES (1,'linked')")
+        con.commit()
+        con.close()
+        for email in ("paid", "trial", "linked"):
+            self.assertTrue(core._user_owns_service(1, email))
+            self.assertFalse(core._user_owns_service(2, email))
+        self.assertFalse(core._user_owns_service(1, "pending"))
+
+    def test_shared_subscription_requires_ownership_of_every_client(self):
+        core.update_db_setting("xui_api_url", "https://panel.example.com")
+        response = Mock(status_code=200)
+        response.json.return_value = {"success": True, "obj": [
+            {"client": {"email": "owned"}}, {"client": {"email": "someone-else"}},
+        ]}
+        with patch.object(core.requests, "get", return_value=response):
+            with patch.object(core, "_user_owns_service", side_effect=lambda uid, email: email == "owned"):
+                self.assertFalse(core._user_owns_subscription(1, "shared-sub-id"))
+
+    def test_credential_callback_denied_before_fetching_links(self):
+        call = Mock(data="getlinks:dir:someone-else")
+        call.from_user.id = 1
+        call.message.chat.id = 1
+        with patch.object(core, "_user_owns_service", return_value=False):
+            with patch.object(core.bot, "answer_callback_query") as answer:
+                with patch.object(core.requests, "get") as get:
+                    with patch.object(core.bot, "send_message") as send:
+                        core.handle_account_get_links(call)
+        answer.assert_called_once()
+        get.assert_not_called()
+        send.assert_not_called()
+
+    def test_successful_subscription_callback_is_acknowledged(self):
+        call = Mock(data="getlinks:sub:owned-subscription")
+        with patch.object(core, "_authorize_service_callback", return_value=True):
+            with patch.object(core, "_subscription_url", return_value="https://sub.example.com/sub/owned"):
+                with patch.object(core.bot, "answer_callback_query") as answer:
+                    with patch.object(core.bot, "send_message"):
+                        core.handle_account_get_links(call)
+        answer.assert_called_once_with(call.id)
+
+    def test_stale_invoice_decisions_cannot_override_another_admin_claim(self):
+        con = sqlite3.connect("speedping.db")
+        con.execute("CREATE TABLE discount_redemptions(tx_id INTEGER, status TEXT)")
+        con.execute("INSERT INTO transactions(id,user_id,status,kind) VALUES (1,1,'PENDING','RENEWAL')")
+        con.execute("INSERT INTO discount_redemptions VALUES (1,'RESERVED')")
+        con.commit()
+        con.close()
+
+        class RacingConnection:
+            def __init__(self):
+                self.connection = core._db_connect()
+
+            def execute(self, sql, args=()):
+                if sql.startswith("UPDATE transactions SET status"):
+                    # Another admin wins after the handler's SELECT and before
+                    # its UPDATE. Use a real independent SQLite connection.
+                    with closing(sqlite3.connect("speedping.db")) as winner:
+                        winner.execute("UPDATE transactions SET status='PROCESSING' WHERE id=1")
+                        winner.commit()
+                return self.connection.execute(sql, args)
+
+            def __getattr__(self, name):
+                return getattr(self.connection, name)
+
+        for action in ("approve", "reject"):
+            with self.subTest(action=action):
+                with closing(sqlite3.connect("speedping.db")) as reset:
+                    reset.execute("UPDATE transactions SET status='PENDING' WHERE id=1")
+                    reset.commit()
+                stale_connection = RacingConnection()
+                with patch.object(core, "_db_connect", return_value=stale_connection):
+                    with patch.object(core, "finalize_service_transaction") as finalize:
+                        with patch.object(core.bot, "answer_callback_query"):
+                            with patch.object(core.bot, "send_message") as send:
+                                core.handle_invoice_decision(Mock(), action, 1)
+                finalize.assert_not_called()
+                send.assert_not_called()
+                with closing(sqlite3.connect("speedping.db")) as check:
+                    self.assertEqual(check.execute("SELECT status FROM transactions WHERE id=1").fetchone()[0], "PROCESSING")
+                    self.assertEqual(check.execute("SELECT status FROM discount_redemptions WHERE tx_id=1").fetchone()[0], "RESERVED")
+
+    def test_backup_delivery_continues_after_one_admin_fails(self):
+        with open("backup.db", "wb") as backup:
+            backup.write(b"test backup")
+        with patch.object(core, "get_admin_ids", return_value=[1, 2]):
+            with patch.object(core.bot, "send_document", side_effect=[RuntimeError("blocked"), None]) as send:
+                with self.assertLogs(core.logger, level="ERROR"):
+                    self.assertEqual(core.send_backup_file_to_admins("backup.db"), 1)
+        self.assertEqual([call.args[0] for call in send.call_args_list], [1, 2])
+
+    def test_backup_filenames_do_not_collide_with_identical_timestamps(self):
+        with patch.object(core, "datetime") as clock:
+            clock.now.return_value.strftime.return_value = "same-instant"
+            first = core.create_database_backup()
+            second = core.create_database_backup()
+        self.assertNotEqual(first, second)
+        self.assertTrue(os.path.isfile(first))
+        self.assertTrue(os.path.isfile(second))
+
+    def test_restart_does_not_replay_uncertain_renewal_or_topup(self):
+        con = sqlite3.connect("speedping.db")
+        for tx_id, kind in ((1, "NEW"), (2, "RENEWAL"), (3, "VOLUME")):
+            con.execute("INSERT INTO transactions(id,status,kind) VALUES (?,'PROCESSING',?)", (tx_id, kind))
+        con.commit()
+        con.close()
+        with patch.object(core, "finalize_service_transaction") as finalize:
+            with patch.object(core, "notify_admins") as notify:
+                core.recover_processing_transactions()
+        finalize.assert_called_once_with(1)
+        self.assertEqual(notify.call_count, 2)
+        con = sqlite3.connect("speedping.db")
+        statuses = dict(con.execute("SELECT id,status FROM transactions"))
+        con.close()
+        self.assertEqual(statuses, {1: "PROCESSING", 2: "ISSUE", 3: "ISSUE"})
+
+    def test_retry_requires_review_confirmation_for_topup(self):
+        con = sqlite3.connect("speedping.db")
+        con.execute("INSERT INTO transactions(id,status,kind) VALUES (1,'ISSUE','VOLUME')")
+        con.commit()
+        con.close()
+        call = Mock()
+        with patch.object(core.bot, "answer_callback_query"):
+            with patch.object(core.bot, "send_message") as send:
+                with patch.object(core, "finalize_service_transaction") as finalize:
+                    core.retry_issue_transaction(call, 1)
+                    finalize.assert_not_called()
+                    self.assertIn("دوباره", send.call_args.args[1])
+                    core.retry_issue_transaction(call, 1, confirmed=True)
+                    finalize.assert_called_once_with(1)
+
+    def test_large_restore_upload_is_rejected_before_download(self):
+        message = Mock(text="")
+        message.document.file_name = "backup.db"
+        message.document.file_size = 21 * 1024 * 1024
+        with patch.object(core, "is_admin", return_value=True):
+            with patch.object(core.bot, "send_message") as send:
+                with patch.object(core.bot, "get_file") as get_file:
+                    core.process_admin_backup_restore(message)
+        get_file.assert_not_called()
+        self.assertIn("۲۰", send.call_args.args[1])
+
+    def test_domain_replacement_preserves_domain_shaped_secrets(self):
+        with open(self.env_path, "a", encoding="utf-8") as config:
+            config.write("export OTHER_SECRET='keep.speed-ping.com.secret'\n")
+        core.update_db_setting("xui_api_url", "https://panel.speed-ping.com")
+        core.replace_domain_in_all_configs("speed-ping.com", "speed-ping.shop")
+        with open(self.env_path, encoding="utf-8") as config:
+            content = config.read()
+        self.assertIn("keep.speed-ping.com.secret", content)
 
     def test_card_photo_setting_and_checkout(self):
         # Default card photo is empty

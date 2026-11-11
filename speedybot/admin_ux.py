@@ -62,7 +62,7 @@ def _cancel_markup():
     return markup
 
 
-def _send_wizard(chat, title, body, handler, *args):
+def _send_wizard(chat, actor, title, body, handler, *args):
     _clear_step(chat)
     text = (
         f"🧭 <b>{escape(title)}</b>\n"
@@ -72,7 +72,7 @@ def _send_wizard(chat, title, body, handler, *args):
         "اگر منصرف شدید، دکمه «لغو عملیات» را بزنید."
     )
     msg = C.BOT.send_message(chat, text, parse_mode="HTML", reply_markup=_cancel_markup())
-    C.BOT.register_next_step_handler(msg, handler, *args)
+    C.register_admin_step(msg, handler, actor, *args)
 
 
 def _plans_brief(limit=20):
@@ -598,13 +598,13 @@ def wizard_callback(call):
         C.BOT.answer_callback_query(call.id, "فقط Owner اصلی اجازه این عملیات را دارد.", show_alert=True)
         return
     C.BOT.answer_callback_query(call.id)
-    _send_wizard(call.message.chat.id, title, body, handler, *args)
+    _send_wizard(call.message.chat.id, call.from_user.id, title, body, handler, *args)
 
 
 def _is_admin_navigation(call):
     if not C.is_admin(call.from_user.id):
         return False
-    return (call.data or "").startswith(("admin:", "plus:", "fix:", "ux:"))
+    return (call.data or "").startswith(("admin:", "plus:", "fix:", "ux:", "custom:"))
 
 
 def state_guard(call):
