@@ -148,7 +148,7 @@ def callback(call):
             parse_mode="HTML",
             reply_markup=C.CORE.back_menu(),
         )
-        C.BOT.register_next_step_handler(msg, _save_brand, actor)
+        C.register_admin_step(msg, _save_brand, actor, actor)
         return
     if action == "toggle" and len(parts) > 2:
         key = parts[2]

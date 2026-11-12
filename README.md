@@ -1,4 +1,4 @@
-# SpeedyBot v4.0.0
+# SpeedyBot v5.0.0
 
 <p align="center">
   <strong>Open-source Telegram sales, subscription and CRM bot for 3x-ui / Sanaei</strong><br>
@@ -19,23 +19,11 @@
 
 SpeedyBot turns Telegram into a practical storefront, self-service area and operations console for a **3x-ui / Sanaei** panel. It can provision clients after payment approval, issue free trials, renew services, deliver Subscription/direct links and QR codes, manage wallet/referral rewards, warn users about expiry, provide platform-specific connection guides, and give administrators a Telegram-first control center.
 
-## Important: v4 is one integrated application
+## Version 5.0.0
 
-The final v4 release is **not** an add-on folder layered over an older release.
+This release updates the supported runtime to **Python 3.11+**, pins current dependencies, expands CI to Python 3.11–3.15, and stages updates in a separate virtualenv so failed deployments can restore the previous dependencies. The existing `main.py` entrypoint, `speedybot/` package, `.env` and `speedping.db` remain the production layout.
 
-There is one production entrypoint:
-
-```text
-/root/SpeedyBot/main.py
-```
-
-The permanent Python package is:
-
-```text
-/root/SpeedyBot/speedybot/
-```
-
-The old development-only paths `app.py` and `speedybot_v4/` are not part of the final integrated layout. Installer, updater, systemd and manual runs all execute the same `main.py` entrypoint.
+Read the [v5 release notes](docs/releases/RELEASE_NOTES_v5.0.0.md), [migration notes](MIGRATION_NOTES.md), [repository and API audit / roadmap (Persian)](docs/AUDIT_FA.md), and [release archive](docs/releases/README.md).
 
 ---
 
@@ -247,7 +235,7 @@ These are examples/default seeds. Review them from `/sudoadmin` before productio
 Recommended production setup:
 
 - Ubuntu **24.04 LTS**.
-- Python 3.12.
+- Python **3.11 or newer**; Python 3.12+ is recommended. Latest pyTelegramBotAPI and Pillow require at least 3.11.
 - Current 3x-ui / Sanaei with `/panel/api/*` API.
 - Bearer API Token from 3x-ui.
 - Telegram Bot Token from `@BotFather`.
@@ -777,21 +765,13 @@ cd /root/SpeedyBot
 
 ### What the updater does
 
-1. Re-executes itself from `/tmp` so it can safely replace its own file.
-2. Resolves the current GitHub branch commit.
-3. Clones the complete repository into a temporary directory.
-4. Validates `main.py`, every `speedybot/*.py`, `install.sh` and `update.sh`.
-5. Installs dependencies before downtime.
-6. Stops the systemd service.
-7. Creates a complete rollback copy of the deployed application.
-8. Backs up `.env` and SQLite DB/WAL/SHM.
-9. Uses `rsync --delete` to make `/root/SpeedyBot` match the published repository.
-10. Preserves `.env`, `.venv/`, SQLite runtime files, `backups/`, `run.sh` and `.deployed_commit`.
-11. Rewrites `run.sh` to execute `main.py`.
-12. Restarts systemd and checks service health / immediate restart loops.
-13. Restores the previous complete application if deployment fails.
+1. Downloads and verifies the selected GitHub branch commit.
+2. Creates an isolated virtualenv under `.venvs/` using Python 3.11+.
+3. Installs release dependencies and runs Python syntax checks, the unit suite, version consistency and shell syntax checks before stopping the bot.
+4. Stops the service, backs up code, runtime data and the existing virtualenv, then switches `.venv` to the new environment and synchronizes source files.
+5. Restarts the service and checks for immediate failures; on failure it attempts to restore code, data and dependencies together.
 
-Because `--delete` is used for source synchronization, old version-specific files are removed automatically when they no longer exist in GitHub.
+`.env`, `speedping.db` (including WAL/SHM), `backups/` and virtualenvs are excluded from source synchronization. Previous environments remain available for rollback; remove old backups/environments only after verifying the new release. To select an interpreter explicitly, run `SPEEDYBOT_PYTHON=/usr/bin/python3.12 ./update.sh`.
 
 ---
 
@@ -858,37 +838,24 @@ For real production, periodically copy backups to another machine/storage provid
 
 ```text
 SpeedyBot/
-├── main.py                    # single production entrypoint
-├── speedybot/                 # integrated application package
-│   ├── __init__.py
-│   ├── core.py                # sales/provisioning business core
-│   ├── context.py
-│   ├── storage.py
-│   ├── ui.py
-│   ├── user_handlers.py
-│   ├── admin_handlers.py
-│   ├── trial.py
-│   ├── corepatch.py
-│   ├── ops.py
-│   └── handlers.py
-├── tests/
-│   └── test_storage.py
-├── install.sh
-├── update.sh
-├── requirements.txt
+├── main.py                    # Telegram polling entrypoint
+├── restore.py                 # offline database restore CLI
+├── speedybot/                 # business logic, handlers and operations
+├── tests/                     # offline unit and regression tests
+├── docs/
+│   ├── AUDIT_FA.md            # architecture, API audit and roadmap
+│   └── releases/              # version history and release notes
+├── .github/                   # CI, Dependabot and contribution templates
+├── .env.example               # configuration template; no real secrets
+├── install.sh                 # fresh installation
+├── update.sh                  # staged deployment and rollback
+├── restore.sh                 # restore CLI launcher
+├── requirements.txt           # pinned direct release dependencies
 ├── VERSION.txt
-├── README.md
-├── README_FA.md
+├── README.md / README_FA.md
 ├── CHANGELOG.md
 ├── MIGRATION_NOTES.md
-├── RELEASE_NOTES_v4.0.0.md
-├── SECURITY.md
-├── SUPPORT.md
-├── CONTRIBUTING.md
-├── AUTHOR.md
-├── LICENSE
-├── .env.example
-└── .github/
+└── LICENSE
 ```
 
 No release-numbered application folder is used.

@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 SERVICE_NAME="xui-bot.service"
 APP_DIR="/root/SpeedyBot"
+PYTHON_BIN="${SPEEDYBOT_PYTHON:-python3}"
 ENV_FILE="$APP_DIR/.env"
 RUNNER_FILE="$APP_DIR/run.sh"
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME"
@@ -40,7 +41,7 @@ write_runner(){
   cat > "$RUNNER_FILE" <<EOF
 #!/usr/bin/env bash
 set -Eeuo pipefail
-source "$ENV_FILE"
+cd "$APP_DIR"
 exec "$APP_DIR/.venv/bin/python3" "$APP_DIR/main.py"
 EOF
   chmod 700 "$RUNNER_FILE"
@@ -50,6 +51,7 @@ EOF
 command -v apt-get >/dev/null 2>&1 || fail "apt-get was not found. Ubuntu/Debian is required."
 [[ -f "$SOURCE_DIR/main.py" ]] || fail "main.py is missing next to install.sh."
 [[ -d "$SOURCE_DIR/speedybot" ]] || fail "speedybot application package is missing."
+[[ ! -f "$ENV_FILE" ]] || fail "An installation already exists at $APP_DIR. Use update.sh to preserve its configuration."
 
 printf '\n============================================================\n SpeedyBot installer\n Telegram sales + 3x-ui / Sanaei automation\n============================================================\n\n'
 printf 'Note: Bot/API tokens are intentionally hidden while typing. Your paste still works; press Enter after pasting.\n\n'
@@ -73,6 +75,7 @@ confirm "Continue installation" || { warn "Installation cancelled."; exit 0; }
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y python3 python3-pip python3-venv curl git ca-certificates rsync
+"$PYTHON_BIN" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' || fail "Python 3.11+ is required. Select it with SPEEDYBOT_PYTHON=/path/to/python3."
 mkdir -p "$APP_DIR"
 
 if [[ "$SOURCE_DIR" != "$APP_DIR" ]]; then
@@ -80,7 +83,8 @@ if [[ "$SOURCE_DIR" != "$APP_DIR" ]]; then
   rsync -a --delete \
     --exclude '.git/' \
     --exclude '.env' \
-    --exclude '.venv/' \
+    --exclude '.venv' \
+    --exclude '.venvs/' \
     --exclude 'speedping.db' \
     --exclude 'speedping.db-wal' \
     --exclude 'speedping.db-shm' \
@@ -93,22 +97,29 @@ else
 fi
 cd "$APP_DIR"
 
-python3 -m venv .venv
-./.venv/bin/python -m pip install --upgrade pip setuptools wheel >/dev/null
-if [[ -f requirements.txt ]]; then ./.venv/bin/python -m pip install -r requirements.txt; else ./.venv/bin/python -m pip install pyTelegramBotAPI requests 'qrcode[pil]'; fi
-./.venv/bin/python -m py_compile main.py speedybot/*.py
+"$PYTHON_BIN" -m venv .venv
+./.venv/bin/python -m pip install --upgrade pip >/dev/null
+./.venv/bin/python -m pip install -r requirements.txt
+./.venv/bin/python -m pip check
+./.venv/bin/python -m compileall -q main.py restore.py speedybot tests
+./.venv/bin/python -m unittest discover -s tests -q
+bash tests/test_update_shell.sh
 bash -n install.sh
 [[ ! -f update.sh ]] || bash -n update.sh
+[[ ! -f restore.sh ]] || bash -n restore.sh
 
-cat > "$ENV_FILE" <<EOF
-export BOT_TOKEN=$(printf '%q' "$BOT_TOKEN")
-export ADMIN_ID=$(printf '%q' "$ADMIN_ID")
-export XUI_API_URL=$(printf '%q' "$XUI_API_URL")
-export XUI_BASE_PATH=$(printf '%q' "$XUI_BASE_PATH")
-export XUI_BEARER_TOKEN=$(printf '%q' "$XUI_BEARER_TOKEN")
-export XUI_SUB_SERVER_URL=$(printf '%q' "$XUI_SUB_SERVER_URL")
-export XUI_SUB_PATH=$(printf '%q' "$XUI_SUB_PATH")
-EOF
+BOT_TOKEN="$BOT_TOKEN" ADMIN_ID="$ADMIN_ID" XUI_API_URL="$XUI_API_URL" \
+XUI_BASE_PATH="$XUI_BASE_PATH" XUI_BEARER_TOKEN="$XUI_BEARER_TOKEN" \
+XUI_SUB_SERVER_URL="$XUI_SUB_SERVER_URL" XUI_SUB_PATH="$XUI_SUB_PATH" \
+./.venv/bin/python - "$ENV_FILE" <<'PY'
+import os
+import sys
+from speedybot.env_manager import update_env_file
+
+keys = ("BOT_TOKEN", "ADMIN_ID", "XUI_API_URL", "XUI_BASE_PATH",
+        "XUI_BEARER_TOKEN", "XUI_SUB_SERVER_URL", "XUI_SUB_PATH")
+update_env_file({key: os.environ[key] for key in keys}, path=sys.argv[1])
+PY
 chmod 600 "$ENV_FILE"
 
 info "Testing 3x-ui API authentication (read-only)..."
@@ -118,7 +129,7 @@ import os, requests, sys
 base=os.environ['XUI_API_URL'].rstrip('/'); path=os.environ.get('XUI_BASE_PATH','').strip(); prefix='' if path in ('','/') else '/'+path.strip('/'); url=f"{base}{prefix}/panel/api/inbounds/list"
 try: r=requests.get(url,headers={'Authorization':'Bearer '+os.environ['XUI_BEARER_TOKEN'],'Accept':'application/json'},timeout=15)
 except Exception as e: print(f"NETWORK|{type(e).__name__}: {e}"); sys.exit(20)
-print(f"HTTP_{r.status_code}|{url}|{(r.text or '').replace(chr(10),' ')[:400]}")
+print(f"HTTP_{r.status_code}|{url}")
 try: ok=r.status_code==200 and bool(r.json().get('success'))
 except Exception: ok=False
 if ok: sys.exit(0)

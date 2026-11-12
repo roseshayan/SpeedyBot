@@ -1,5 +1,6 @@
 # Python
 .venv/
+.venvs/
 venv/
 __pycache__/
 *.py[cod]
@@ -15,6 +16,7 @@ backups/
 bot.log
 *.log
 run.sh
+.deployed_commit
 
 # IDE / OS
 .vscode/

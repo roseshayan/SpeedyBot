@@ -4,6 +4,17 @@ import time
 from . import context as C
 
 
+def recover_interrupted():
+    """Allow interrupted issuances to retry after startup, preserving used trials."""
+    c = C.db()
+    try:
+        cursor = c.execute("UPDATE trial_services SET status='FAILED' WHERE status='CREATING'")
+        c.commit()
+        return cursor.rowcount
+    finally:
+        c.close()
+
+
 def override(uid):
     if C.setting("trial_overrides_enabled", "1") != "1":
         return None
@@ -186,16 +197,20 @@ def request(message):
 
     gb, days, ip, is_override = values(uid)
     label = "تنظیم اختصاصی شما" if is_override else "تنظیم عمومی تست"
-    C.BOT.send_message(
-        message.chat.id,
-        "⚡️ در حال ساخت تست رایگان شما هستم...\n\n"
-        f"📦 حجم: <b>{gb:g} GB</b>\n"
-        f"⏱ اعتبار: <b>{days} روز</b>\n"
-        f"👥 IP Limit: <b>{ip if ip else 'بدون محدودیت'}</b>\n"
-        f"⚙️ {label}",
-        parse_mode="HTML",
-        reply_markup=C.CORE.main_menu(),
-    )
+    try:
+        C.BOT.send_message(
+            message.chat.id,
+            "⚡️ در حال ساخت تست رایگان شما هستم...\n\n"
+            f"📦 حجم: <b>{gb:g} GB</b>\n"
+            f"⏱ اعتبار: <b>{days} روز</b>\n"
+            f"👥 IP Limit: <b>{ip if ip else 'بدون محدودیت'}</b>\n"
+            f"⚙️ {label}",
+            parse_mode="HTML",
+            reply_markup=C.CORE.main_menu(),
+        )
+    except Exception as exc:
+        C.CORE._mark_trial(uid, "FAILED", exc)
+        return
     C.CORE.generate_trial_xui_config(uid, email)
 
 

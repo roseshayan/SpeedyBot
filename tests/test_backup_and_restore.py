@@ -94,6 +94,46 @@ class BackupManagerTests(unittest.TestCase):
         self.assertTrue(valid)
         self.assertEqual(stats["users"], 5)
 
+    def test_safety_snapshots_are_unique_and_stay_beside_database(self):
+        first = backup_manager.create_safety_snapshot(str(self.valid_db_path))
+        second = backup_manager.create_safety_snapshot(str(self.valid_db_path))
+        self.assertNotEqual(first, second)
+        self.assertEqual(Path(first).parent, self.dir_path / "backups" / "pre-restore")
+        self.assertTrue(Path(first).is_file())
+        self.assertTrue(Path(second).is_file())
+
+    def test_restore_rejects_source_equal_to_target(self):
+        success, _, stats, snapshot = backup_manager.restore_database_from_file(
+            str(self.valid_db_path), str(self.valid_db_path)
+        )
+        self.assertFalse(success)
+        self.assertEqual(stats, {})
+        self.assertIsNone(snapshot)
+
+    def test_restore_preserves_sqlite_owned_wal_for_live_connections(self):
+        target = self.dir_path / "wal-target.db"
+        self._init_sample_db(target, users_count=1)
+        connection = sqlite3.connect(target)
+        try:
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("UPDATE users SET username='before' WHERE id=1")
+            connection.commit()
+            success, _, _, _ = backup_manager.restore_database_from_file(
+                str(self.valid_db_path), str(target), pre_restore_backup=False
+            )
+            self.assertTrue(success)
+            self.assertTrue(Path(str(target) + "-wal").exists())
+            self.assertTrue(Path(str(target) + "-shm").exists())
+            connection.execute("UPDATE users SET username='after' WHERE id=1")
+            connection.commit()
+            reader = sqlite3.connect(target)
+            try:
+                self.assertEqual(reader.execute("SELECT username FROM users WHERE id=1").fetchone()[0], "after")
+            finally:
+                reader.close()
+        finally:
+            connection.close()
+
     def test_restore_database_from_file(self):
         # Create target database with older data
         target_db = self.dir_path / "target.db"

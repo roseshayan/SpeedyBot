@@ -1,5 +1,29 @@
 # SpeedyBot migration notes
 
+## v4.x → v5.0.0
+
+1. Ensure **Python 3.11+** is installed. Current pyTelegramBotAPI and Pillow require it. Ubuntu 24.04's Python 3.12 is supported.
+2. Copy a verified database/configuration backup to another machine. Keep `.env`, `speedping.db` and `backups/` in their existing locations.
+3. Refresh the updater from the v5 release before upgrading; older updater copies do not include dependency rollback:
+
+```bash
+cd /root/SpeedyBot
+cp -a update.sh update.sh.pre-v5
+curl -fsSL https://raw.githubusercontent.com/roseshayan/SpeedyBot/main/update.sh -o update.sh
+chmod 700 update.sh
+bash -n update.sh
+./update.sh --check
+./update.sh
+```
+
+If the system default Python is older, use `SPEEDYBOT_PYTHON=/usr/bin/python3.12 ./update.sh` after installing the interpreter and matching venv package.
+
+The updater creates the new environment under `.venvs/<deployment>/`, runs validation before stopping the bot, and changes `.venv` to point at it. The preceding `.venv` directory or symlink is retained in the deployment backup. A failed deployment attempts to restore code, database/configuration and the preceding environment together. Old environments are retained; clean them only after verifying the release and its backup.
+
+Generated `run.sh` enters the application directory; Python loads `.env` using the application parser. Existing shell-style `export KEY='value'` settings remain supported. Avoid shell commands inside `.env`; store only configuration assignments.
+
+Historical release notes moved to [docs/releases](docs/releases/README.md). There is no version-numbered runtime package and no database relocation. Read the [v5 release notes](docs/releases/RELEASE_NOTES_v5.0.0.md) and [API audit](docs/AUDIT_FA.md), then verify `/start`, `/sudoadmin`, `/xuidiag`, checkout, renewals and backup on the real bot.
+
 ## v3.1.x → v4.0.0
 
 SpeedyBot v4 is shipped as **one integrated application**, not as a versioned extension layer.

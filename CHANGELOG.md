@@ -1,5 +1,26 @@
 # Changelog
 
+## 5.0.0 — 2026-11-11
+
+- Require Python 3.11+ and pin current pyTelegramBotAPI 4.37.1, requests 2.34.2, qrcode 8.2 and Pillow 13.0.0.
+- Fix tokenless CI test imports and validate against installed dependencies on Python 3.11–3.15.
+- Stage updates in a separate virtualenv before downtime; retain the previous environment for dependency rollback.
+- Protect existing installations from accidental installer configuration replacement.
+- Archive historical release notes under `docs/releases/`, refresh project layout/version documentation and add the Persian architecture/API audit.
+- Improve API, environment and backup/restore reliability; see [release notes](docs/releases/RELEASE_NOTES_v5.0.0.md) and [audit](docs/AUDIT_FA.md).
+
+## 4.3.0 — Card checkout, environment settings and backup/restore
+
+See [release notes](docs/releases/RELEASE_NOTES_v4.3.0.md).
+
+## 4.2.0 — Linked renewals and operator reliability
+
+See [release notes](docs/releases/RELEASE_NOTES_v4.2.0.md).
+
+## 4.1.0 — Branding and customer menus
+
+See [release notes](docs/releases/RELEASE_NOTES_v4.1.0.md).
+
 ## 4.0.2 — Admin Interaction & Guidance Patch
 
 ### Fixed
