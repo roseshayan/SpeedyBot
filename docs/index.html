@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SpeedyBot | ربات فروش تلگرام برای 3x-ui</title>
+  <meta name="description" content="راهنمای فارسی SpeedyBot، ربات متن‌باز فروش و مدیریت اشتراک 3x-ui در تلگرام. نصب روی Ubuntu، تنظیم API و آموزش پنل ادمین، بکاپ و رفع خطا.">
+  <meta name="theme-color" content="#f7f9f7">
+  <link rel="canonical" href="https://roseshayan.github.io/SpeedyBot/">
+  <link rel="alternate" hreflang="fa" href="https://roseshayan.github.io/SpeedyBot/">
+  <link rel="alternate" hreflang="en" href="https://roseshayan.github.io/SpeedyBot/en/">
+  <link rel="alternate" hreflang="x-default" href="https://roseshayan.github.io/SpeedyBot/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="SpeedyBot">
+  <meta property="og:title" content="SpeedyBot | ربات فروش تلگرام برای 3x-ui">
+  <meta property="og:description" content="راهنمای فارسی SpeedyBot، ربات متن‌باز فروش و مدیریت اشتراک 3x-ui در تلگرام. نصب روی Ubuntu، تنظیم API و آموزش پنل ادمین، بکاپ و رفع خطا.">
+  <meta property="og:url" content="https://roseshayan.github.io/SpeedyBot/">
+  <meta property="og:locale" content="fa_IR">
+  <meta property="og:locale:alternate" content="en_US">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="SpeedyBot | ربات فروش تلگرام برای 3x-ui">
+  <meta name="twitter:description" content="راهنمای فارسی SpeedyBot، ربات متن‌باز فروش و مدیریت اشتراک 3x-ui در تلگرام. نصب روی Ubuntu، تنظیم API و آموزش پنل ادمین، بکاپ و رفع خطا.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&amp;family=Vazirmatn:wght@400;500;600;700;800&amp;display=swap">
+  <link rel="stylesheet" href="assets/site.css">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "SpeedyBot",
+  "description": "راهنمای فارسی SpeedyBot، ربات متن‌باز فروش و مدیریت اشتراک 3x-ui در تلگرام. نصب روی Ubuntu، تنظیم API و آموزش پنل ادمین، بکاپ و رفع خطا.",
+  "url": "https://roseshayan.github.io/SpeedyBot/",
+  "inLanguage": "fa",
+  "operatingSystem": "Linux",
+  "applicationCategory": "BusinessApplication",
+  "softwareHelp": "https://roseshayan.github.io/SpeedyBot/#install",
+  "installUrl": "https://roseshayan.github.io/SpeedyBot/#install",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD",
+    "url": "https://github.com/roseshayan/SpeedyBot"
+  },
+  "license": "https://github.com/roseshayan/SpeedyBot/blob/main/LICENSE",
+  "author": {
+    "@type": "Person",
+    "name": "SudoShayanNA",
+    "url": "https://github.com/roseshayan/SpeedyBot/blob/main/AUTHOR.md"
+  },
+  "sameAs": "https://github.com/roseshayan/SpeedyBot"
+}
+  </script>
+  <script src="assets/site.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">رفتن به محتوای اصلی</a>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="./" aria-label="SpeedyBot">
+        <span class="brand-mark" aria-hidden="true"></span><bdi lang="en">SpeedyBot</bdi>
+      </a>
+      <nav aria-label="بخش‌های راهنما">
+        <a href="#overview">معرفی</a>
+        <a href="#install">نصب</a>
+        <a href="#admin">پنل ادمین</a>
+        <a href="#operations">نگهداری</a>
+      </nav>
+      <a class="language" href="en/" hreflang="en" lang="en">English</a>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="wrap hero-layout">
+        <div>
+          <p class="eyebrow">ربات متن‌باز تلگرام برای 3x-ui</p>
+          <h1 id="hero-title">فروش و مدیریت سرویس <span>در تلگرام</span></h1>
+          <p class="hero-text">SpeedyBot پس از تأیید پرداخت در 3x-ui سرویس می‌سازد و لینک سابسکریپشن و کانفیگ را به مشتری تحویل می‌دهد. مشتری می‌تواند مصرفش را ببیند، سرویس را تمدید کند یا درخواست پشتیبانی بفرستد.</p>
+          <div class="actions">
+            <a class="button button-primary" href="#install">شروع نصب</a>
+            <a class="button" href="#admin">راهنمای پنل ادمین</a>
+          </div>
+          <ul class="stack" lang="en"><li>Telegram</li><li>3x-ui / Sanaei</li><li>Linux</li><li>MIT</li></ul>
+        </div>
+        <figure class="flow">
+          <figcaption>مسیر یک خرید</figcaption>
+          <ol>
+            <li><span class="flow-icon" aria-hidden="true">TG</span><span><strong>مشتری در تلگرام</strong><small>انتخاب پلان و ارسال رسید</small></span></li>
+            <li><span class="flow-icon" aria-hidden="true">OK</span><span><strong>پنل ادمین</strong><small>بررسی و تأیید تراکنش</small></span></li>
+            <li><span class="flow-icon" aria-hidden="true">UI</span><span><strong>پنل 3x-ui</strong><small>ساخت سرویس و تحویل کانفیگ</small></span></li>
+          </ol>
+          <p class="flow-foot">تمدید، خرید حجم و بررسی مصرف از حساب کاربری</p>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" id="overview" aria-labelledby="features-title">
+      <div class="wrap">
+        <div class="section-head"><h2 id="features-title">SpeedyBot چه کار می‌کند؟</h2></div>
+        <div class="features">
+          <article class="feature"><h3>فروش و تحویل</h3><p>خرید با رسید کارت‌به‌کارت یا کیف پول، صدور تست، تمدید همان سرویس، فروش حجم برای پلان‌های محدود و تحویل سابسکریپشن، لینک مستقیم و QR.</p></article>
+          <article class="feature"><h3>حساب کاربری</h3><p>مشاهدهٔ زمان و حجم باقی‌مانده، سوابق خرید و کیف پول، بازیابی لینک‌ها، راهنمای اتصال، پشتیبانی و اتصال سرویس قبلی با بررسی مالکیت.</p></article>
+          <article class="feature"><h3>مدیریت و نگهداری</h3><p>قیمت و دسته‌بندی پلان‌ها، انتخاب Inbound، عضویت اجباری، کد هدیه و تخفیف، معرفی، نظرسنجی، اعلان مصرف و انقضا، بکاپ و گزارش فروش.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-white" id="install" aria-labelledby="install-title">
+      <div class="wrap">
+        <header class="section-head"><h2 id="install-title">نصب روی سرور</h2><p class="lead">این مسیر برای نصب تازه روی Ubuntu یا Debian با systemd است. Ubuntu 24.04 LTS و Python 3.11 یا بالاتر پیشنهاد می‌شود. برای نصب موجود از به‌روزرسان استفاده کن.</p></header>
+        <div class="install-layout">
+          <article class="panel">
+            <h3>آماده‌سازی</h3>
+            <ol>
+              <li>در <a href="https://t.me/BotFather">BotFather</a> دستور <code>/newbot</code> را بزن و توکن را نگه دار. شناسهٔ عددی حساب مالک ربات را آماده کن. اگر به آن دسترسی نداری، قبل از اجرای ربات یک پیام خصوصی برای آن بفرست و در پاسخ <a href="https://core.telegram.org/bots/api#getupdates">getUpdates</a> مقدار <code>message.from.id</code> را پیدا کن.</li>
+              <li>در <a href="https://github.com/MHSanaei/3x-ui"><bdi>3x-ui</bdi></a> از <bdi>Settings → Security → API Token</bdi> یک توکن بساز و مقدار کامل آن را بردار. حداقل یک Inbound را فعال کن و آدرس و مسیر Subscription را در تنظیمات پنل بررسی کن.</li>
+              <li>از سرور به Telegram Bot API و آدرس API پنل دسترسی خروجی داشته باش. مشتری‌ها هم باید بتوانند به آدرس عمومی سابسکریپشن وصل شوند. ربات از polling استفاده می‌کند و برای آن به پورت وب‌هوک نیاز نداری.</li>
+            </ol>
+          </article>
+          <article class="panel">
+            <h3>اجرای نصب‌کننده</h3>
+            <p>با <code>sudo -i</code> وارد حساب root شو و دستورهای زیر را به‌ترتیب اجرا کن. ورود توکن‌ها هنگام تایپ نمایش داده نمی‌شود.</p>
+            <div class="terminal">
+              <div class="terminal-head"><span lang="en">Bash</span><button type="button" class="copy" hidden data-label="کپی" data-copied="کپی شد" data-selected="متن انتخاب شد">کپی</button></div>
+              <pre><code>apt update
+apt install -y git
+git clone https://github.com/roseshayan/SpeedyBot.git /root/SpeedyBot
+cd /root/SpeedyBot
+bash install.sh</code></pre>
+            </div>
+          </article>
+        </div>
+        <article class="panel">
+          <h3>مقادیر نصب‌کننده</h3>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th scope="col">نام تنظیم</th><th scope="col">نمونه و توضیح</th></tr></thead>
+              <tbody>
+                <tr><td><code>BOT_TOKEN</code></td><td>توکن کامل BotFather</td></tr>
+                <tr><td><code>ADMIN_ID</code></td><td>شناسهٔ عددی حساب مالک، مانند <code>123456789</code></td></tr>
+                <tr><td><code>XUI_API_URL</code></td><td>مبدأ پنل، مانند <code>https://panel.example.com:2053</code></td></tr>
+                <tr><td><code>XUI_BASE_PATH</code></td><td>مسیر مخفی پنل، مانند <code>/private</code>. در صورت نبود مسیر مخفی، <code>/</code></td></tr>
+                <tr><td><code>XUI_BEARER_TOKEN</code></td><td>مقدار خام API Token سنایی</td></tr>
+                <tr><td><code>XUI_SUB_SERVER_URL</code></td><td>مبدأ عمومی سابسکریپشن، مانند <code>https://sub.example.com:2096</code></td></tr>
+                <tr><td><code>XUI_SUB_PATH</code></td><td>مسیر واقعی سابسکریپشن، مانند <code>/sub/</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="table-note">برای <code>https://panel.example.com:2053/private/</code> مسیر <code>/private</code> را در فیلد مجزا وارد کن. برای آدرس Subscription، شناسهٔ اختصاصی مشتری را از انتهای مثال حذف کن. نصب‌کننده دسترسی خواندن API را قبل از فعال‌کردن سرویس می‌آزماید.</p>
+        </article>
+        <article class="panel first-run">
+          <div><h3>بررسی اولین اجرا</h3><p>ابتدا وضعیت سرویس و آخرین لاگ‌ها را ببین. سپس با حساب مالک در چت خصوصی ربات <code>/start</code> و <code>/sudoadmin</code> را اجرا کن.</p></div>
+          <div class="terminal">
+              <div class="terminal-head"><span lang="en">Bash</span><button type="button" class="copy" hidden data-label="کپی" data-copied="کپی شد" data-selected="متن انتخاب شد">کپی</button></div>
+              <pre><code>systemctl status xui-bot.service --no-pager -l
+journalctl -u xui-bot.service -n 100 --no-pager</code></pre>
+            </div>
+          <ol>
+              <li>در «حساب واریز» شمارهٔ کارت، نام دارنده و بانک را تنظیم کن. تصویر کارت اختیاری است.</li>
+              <li>در «پلان‌ها» قیمت و شرایط پلان‌های نمونه را بازبینی کن. در «تست و Inboundها» مسیر تست و هر پلان را تعیین کن.</li>
+              <li>دستور <code>/xuidiag</code> و <code>/groupsdiag</code> را اجرا کن. از حساب تست، یک تست رایگان و یک خرید کامل را امتحان کن و تحویل کانفیگ را بررسی کن.</li>
+            </ol>
+        </article>
+      </div>
+    </section>
+
+    <section class="section admin" id="admin" aria-labelledby="admin-title">
+      <div class="wrap">
+        <header class="section-head"><h2 id="admin-title">راهنمای پنل ادمین</h2><p class="lead">همهٔ مسیرهای زیر از <code>/sudoadmin</code> شروع می‌شوند، مگر جایی که دکمه در پیام رسید مشتری باشد. عنوان هر بخش با منوی داخل ربات هماهنگ است.</p></header>
+        <div class="admin-tools" hidden>
+          <label for="admin-search">جست‌وجوی بخش‌های مدیریت</label>
+          <input id="admin-search" type="search" placeholder="مثلاً عضویت، تخفیف یا Inbound">
+        </div>
+        <p id="admin-empty" role="status" hidden>بخش مرتبطی پیدا نشد.</p>
+        <details id="payments" open>
+          <summary>حساب واریز، رسید و گزارش فروش</summary>
+          <div class="detail">
+            <ol><li>در «حساب واریز» شماره و نام دارندهٔ کارت، بانک و در صورت نیاز عکس کارت را ثبت کن.</li>
+            <li>وقتی مشتری رسید بفرستد، همان پیام را با مبلغ، سفارش و دریافت وجه مقایسه کن. «تأیید» ساخت یا تمدید سرویس را شروع می‌کند. «رد» برای رسید نامعتبر است.</li>
+            <li>«گزارش فروش» تعداد خرید، تمدید و حجم اضافه و ریز درآمد نقدی، کیف پول و پورسانت را نشان می‌دهد.</li></ol><p>اگر تراکنش <code>APPROVED</code> است ولی کانفیگ نرسیده، مشتری می‌تواند از «حساب کاربری» سرویس را باز کند و «دریافت کانفیگ‌های مستقیم» را بزند. اگر تراکنش تمدید یا حجم <code>ISSUE</code> است، قبل از تکرار بررسی کن سهمیه یا زمان روی پنل اعمال شده یا نه.</p>
+          </div>
+        </details>
+        <details id="plans">
+          <summary>پلان، دسته‌بندی، حجم و نام سرویس</summary>
+          <div class="detail">
+            <ol><li>در «پلان‌ها» قیمت به تومان، حجم برحسب GB، مدت به روز و IP Limit را وارد کن. مقدار <code>0</code> برای حجم یعنی نامحدود. مثال افزودن پلان را پایین ببین.</li>
+            <li>در ویرایش پلان، ID را اول خط بگذار. از «دسته‌بندی پلان‌ها» دسته بساز و ID پلان را به آن اختصاص بده.</li>
+            <li>بستهٔ حجم اضافه را از «پلان‌ها» تعریف کن. برای پلان نامحدود گزینهٔ خرید حجم نمایش داده نمی‌شود. همان‌جا می‌توانی روش نام‌گذاری سرویس را کنترل کنی.</li>
+            <li>پلان دارای سابقهٔ تراکنش را غیرفعال کن تا تاریخچهٔ خرید حفظ شود.</li></ol><p><code class="example">ماهانه دوکاربره | 350000 | 30 | 30 | 2</code></p>
+          </div>
+        </details>
+        <details id="trial">
+          <summary>تست، Inbound و Groups</summary>
+          <div class="detail">
+            <ul><li>«تست و Inboundها» برای خاموش یا روشن کردن تست، تعیین حجم/مدت/IP پیش‌فرض و انتخاب Inbound برای تست یا هر پلان است. بازنشانی انتخاب، همهٔ Inboundهای فعال را برمی‌گرداند.</li>
+            <li>پیش از اولین تست کاربر در «تست اختصاصی» فرمت <bdi><code>Telegram ID | GB | Days | IP Limit | Note</code></bdi> را وارد کن.</li>
+            <li>«Groups» تعداد کلاینت‌ها را از پنل می‌خواند. گزینهٔ ساخت و همگام‌سازی، گروه‌های مورد نیاز را ایجاد می‌کند؛ پیش‌فرض مشتریان پولی <code>Customers</code> و تست‌ها <code>Trial</code> است.</li></ul>
+          </div>
+        </details>
+        <details id="membership">
+          <summary>احراز، عضویت، مدیران و وضعیت فروش</summary>
+          <div class="detail">
+            <ul><li>در «احراز و عضویت» می‌توانی درخواست شمارهٔ تلگرام کاربر را برای خرید فعال کنی. برای عضویت، ربات را ادمین کانال کن و <code>@channel</code> یا لینک عمومی را وارد کن. برای کانال خصوصی از <code>-1001234567890 | https://t.me/+InviteLink</code> با مقادیر واقعی استفاده کن.</li>
+            <li>«بررسی دسترسی ربات» را بزن، سپس عضویت را فعال کن و با یک عضو و یک غیرعضو امتحان کن.</li>
+            <li>افزودن و حذف مدیر با شناسهٔ عددی از حساب مالک انجام می‌شود. «لیست سیاه» خرید و تست کاربر را محدود می‌کند؛ «غیرفعال‌کردن کاربر» او را از فهرست کاربران فعال پیام همگانی خارج می‌کند.</li>
+            <li>«وضعیت فروش» حالت عادی، توقف خرید/تمدید/حجم یا تعمیرات را کنترل می‌کند. در تعمیرات صدور تست هم متوقف می‌شود. حساب، راهنما و پشتیبانی همچنان در دسترس‌اند.</li></ul>
+          </div>
+        </details>
+        <details id="rewards">
+          <summary>کیف پول، معرفی، تخفیف و هدیه</summary>
+          <div class="detail">
+            <ul><li>از «همکاری در فروش» برنامهٔ معرفی، درصد پورسانت، کاربران برتر و اصلاح موجودی کیف پول را مدیریت کن. نمونهٔ تعدیل کیف پول <code>123456789 | 50000</code> است. مقدار منفی از موجودی کم می‌کند.</li>
+            <li>در «کد و پاداش» کش‌بک را روشن یا خاموش کن و درصد را تنظیم کن. کد تخفیف مبلغی یا درصدی می‌تواند سقف استفاده، حداقل خرید و زمان انقضا داشته باشد.</li>
+            <li>کد هدیه کیف پول مشتری را شارژ می‌کند. ترتیب فیلدها در ربات نمایش داده می‌شود.</li></ul><p>نمونهٔ تخفیف درصدی <code class="example">WELCOME20 | percent | 20 | 200000 | 100 | 30</code></p><p>نمونهٔ شارژ کیف پول <code class="example">GIFT50 | 50000 | 20 | 30</code></p>
+          </div>
+        </details>
+        <details id="crm">
+          <summary>CRM، اتصال سرویس، بازخورد و پیام هدفمند</summary>
+          <div class="detail">
+            <ul><li>در CRM نظرسنجی منبع آشنایی، پیگیری بعد از پایان تست و تعداد ساعت تأخیر را تنظیم کن. کاربری که تا زمان پیگیری خرید کرده دوباره پیام پیگیری تست نمی‌گیرد.</li>
+            <li>برای اتصال سرویس قدیمی، مشتری نام Client را از حساب کاربری می‌دهد. اگر <code>tgId</code> با حساب مشتری یکی باشد اتصال خودکار است. در غیر این صورت درخواست تأیید ادمین را قبل از اجازه بررسی کن.</li>
+            <li>«بازخورد مشتری» امتیاز و نظرها را نشان می‌دهد. در «پیام هدفمند» گروه مخاطبان، مانند مشتریان خریدار یا کاربران تستِ بدون خرید، را انتخاب و پیام را ارسال کن.</li></ul>
+          </div>
+        </details>
+        <details id="appearance">
+          <summary>راهنمای اتصال، ظاهر، برند و متن‌ها</summary>
+          <div class="detail">
+            <ul><li>در «راهنمای اتصال» سیستم‌عامل را انتخاب کن و متن، عکس یا ویدیو اضافه کن. ترتیب را تنظیم کن و پیش‌نمایش کاربر را ببین.</li>
+            <li>«متن‌ها و FAQ» پیام خوش‌آمد و سؤالات رایج را ویرایش می‌کند. «برند و منوی مشتری» نام برند و دکمه‌های قابل مشاهده را کنترل می‌کند.</li>
+            <li>در «ظاهر و دکمه‌ها» سبک دکمه و Custom Emoji را تنظیم کن. با <code>/emojiid</code> شناسه را پیدا کن و از تست داخل ربات استفاده کن.</li>
+            <li>«سرور مجازی ساعتی» صفحهٔ معرفی سرویس میزبانی است. کار نصب و مدیریت VPS خارج از ربات انجام می‌شود.</li></ul>
+          </div>
+        </details>
+        <details id="panel-ops">
+          <summary>پنل و دامنه، اعلان، بکاپ و عملیات سرور</summary>
+          <div class="detail">
+            <ul><li>برای تغییر API، مسیر مخفی، توکن یا آدرس Subscription از «پنل و دامنه (.env)» استفاده کن. قبل از قبول خرید جدید تست اتصال زنده را اجرا کن. برای تغییر دامنه، از گزینهٔ تعویض دامنه برای به‌روزرسانی آدرس‌های ذخیره‌شده استفاده کن.</li>
+            <li>«اعلان سرویس» وضعیت پایش حجم و انقضا را نشان می‌دهد؛ می‌توانی پایش را روشن، خاموش یا همان لحظه اجرا کنی. «وضعیت سرور» مصرف CPU، رم، دیسک و وضعیت Xray را از پنل می‌خواند.</li>
+            <li>«بکاپ» ساخت نسخهٔ دستی، زمان‌بندی خودکار، ارسال تلگرامی و بازیابی SQLite را پوشش می‌دهد. «Snapshot پنل» خروجی JSON فقط‌خواندنی پنل است. «Audit Log» رخدادهای مدیریتی را نمایش می‌دهد و می‌تواند آن‌ها را به چت خصوصی ارسال کند.</li>
+            <li>«حذف از پنل» Client مشخص را در 3x-ui حذف می‌کند. قبل از اجرا نام دقیق Client و سفارش مرتبط را بررسی کن.</li></ul>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <section class="section section-white" id="operations" aria-labelledby="operations-title">
+      <div class="wrap">
+        <header class="section-head"><h2 id="operations-title">به‌روزرسانی، بکاپ و بازیابی</h2><p class="lead">پوشهٔ اجرای پیش‌فرض <code>/root/SpeedyBot</code> و نام سرویس <code>xui-bot.service</code> است. دستورهای این بخش را با حساب root اجرا کن.</p></header>
+        <div class="ops-grid">
+          <article class="panel">
+            <h3>به‌روزرسانی</h3>
+            <p>به‌روزرسان وابستگی‌ها و تست‌ها را در محیط جدا بررسی می‌کند، بعد از کد و داده نسخهٔ پشتیبان می‌گیرد و در صورت خطای راه‌اندازی برای بازگشت تلاش می‌کند. برای نصب قدیمی، ابتدا <a href="https://github.com/roseshayan/SpeedyBot/blob/main/MIGRATION_NOTES.md">یادداشت‌های مهاجرت</a> را بخوان.</p>
+            <div class="terminal">
+              <div class="terminal-head"><span lang="en">Bash</span><button type="button" class="copy" hidden data-label="کپی" data-copied="کپی شد" data-selected="متن انتخاب شد">کپی</button></div>
+              <pre><code>cd /root/SpeedyBot
+bash update.sh --check
+bash update.sh</code></pre>
+            </div>
+          </article>
+          <article class="panel">
+            <h3>بازیابی دیتابیس</h3>
+            <p>از منوی «بکاپ» نسخهٔ دستی بگیر و یک کپی خارج از سرور نگه دار. فایل‌های <code>.env</code>، <code>speedping.db</code> و محتویات <code>backups/</code> را خصوصی نگه دار. بازیابی دیتابیس، سفارش‌ها و تنظیمات ربات را به زمان بکاپ برمی‌گرداند. بازیابی Clientهای 3x-ui جداگانه است.</p>
+            <div class="terminal">
+              <div class="terminal-head"><span lang="en">Bash</span><button type="button" class="copy" hidden data-label="کپی" data-copied="کپی شد" data-selected="متن انتخاب شد">کپی</button></div>
+              <pre><code>cd /root/SpeedyBot
+bash restore.sh /path/to/backup.db
+systemctl status xui-bot.service --no-pager</code></pre>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="troubleshooting" aria-labelledby="troubleshooting-title">
+      <div class="wrap">
+        <header class="section-head"><h2 id="troubleshooting-title">رفع خطاهای رایج</h2><p class="lead">برای عیب‌یابی از پیام خطا شروع کن. هنگام اشتراک‌گذاری خروجی، توکن، لینک سابسکریپشن، QR و کانفیگ مشتری را حذف کن.</p></header>
+        <details id="help-1" open>
+          <summary>ربات پاسخ نمی‌دهد</summary>
+          <div class="detail">
+            <p>با <code>systemctl status xui-bot.service --no-pager -l</code> و <code>journalctl -u xui-bot.service -n 100 --no-pager</code> سرویس را بررسی کن. از درست بودن توکن، اتصال به تلگرام و اجرای فقط یک نمونه با همان توکن مطمئن شو.</p>
+          </div>
+        </details>
+        <details id="help-2">
+          <summary>خطای 401، 403 یا 404 پنل</summary>
+          <div class="detail">
+            <p><code>/xuidiag</code> یا «تست اتصال زنده» را اجرا کن. برای 401 یا 403، مقدار توکن و دسترسی API را بررسی کن. برای 404، Base URL، مسیر مخفی و مسیر‌دهی پراکسی معکوس را جدا بررسی کن.</p>
+          </div>
+        </details>
+        <details id="help-3">
+          <summary>نصب اولیه بعد از preflight متوقف شد</summary>
+          <div class="detail">
+            <p>در نصب تازه ممکن است <code>.env</code> پیش از بررسی اتصال ذخیره شده باشد. اگر سرویس هنوز ایجاد نشده، فایل را با دسترسی خصوصی به نام پشتیبان منتقل کن و نصب را با اطلاعات درست دوباره اجرا کن. برای سرویس در حال کار از مسیر تنظیمات و به‌روزرسان استفاده کن.</p>
+          </div>
+        </details>
+        <details id="help-4">
+          <summary>بررسی عضویت کانال خطا می‌دهد</summary>
+          <div class="detail">
+            <p>در «احراز و عضویت» روی «بررسی دسترسی ربات» بزن. اگر خطای دسترسی یا شناسه می‌بینی، ربات را در همان کانال ادمین کن و برای کانال خصوصی Chat ID عددی را بگذار. دکمهٔ «بررسی مجدد عضویت» را با حساب مشتری هم امتحان کن.</p>
+          </div>
+        </details>
+        <details id="help-5">
+          <summary>تراکنش تأیید شد ولی کانفیگ نرسید</summary>
+          <div class="detail">
+            <p>مشتری می‌تواند از «حساب کاربری» ← سرویس ← «دریافت کانفیگ‌های مستقیم» دوباره لینک‌ها را بگیرد. اگر لینک دریافتی آدرس اشتباه دارد، آن را با Copy URL در 3x-ui مقایسه و Share Address / Public Host همان Inbound را بررسی کن.</p>
+          </div>
+        </details>
+        <details id="help-6">
+          <summary>اعلان مصرف یا انقضا نرسید</summary>
+          <div class="detail">
+            <p>از «اعلان سرویس» گزینهٔ بررسی همین الان یا دستور <code>/notifydiag</code> را اجرا کن و تعداد سرویس‌های پیدا‌شده و خطاها را ببین. برای بررسی گروه‌های پنل <code>/groupsdiag</code> را اجرا کن.</p>
+          </div>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p>پروژهٔ متن‌باز با مجوز MIT، نگه‌داری‌شده توسط SudoShayanNA.</p>
+      <nav aria-label="منابع پروژه">
+        <a href="https://github.com/roseshayan/SpeedyBot">مخزن GitHub</a>
+        <a href="https://github.com/roseshayan/SpeedyBot/blob/main/README_FA.md">README فارسی</a>
+        <a href="https://github.com/roseshayan/SpeedyBot/blob/main/CHANGELOG.md">تغییرات نسخه‌ها</a>
+        <a href="https://github.com/roseshayan/SpeedyBot/blob/main/SECURITY.md">امنیت</a>
+        <a href="https://github.com/roseshayan/SpeedyBot/issues">گزارش مشکل</a>
+      </nav>
+    </div>
+  </footer>
+  <div id="clipboard-status" class="visually-hidden" role="status"></div>
+</body>
+</html>
