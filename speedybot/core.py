@@ -2,6 +2,7 @@ import os
 import telebot
 from telebot import apihelper
 from telebot import types
+from telebot.util import MAX_MESSAGE_LENGTH
 import sqlite3
 import requests
 import time
@@ -821,19 +822,65 @@ def user_phone_verified(user_id):
     return bool(row and row['phone_verified_at'])
 
 
+def _required_channel_id(value):
+    channel = (value or '').strip()
+    if re.fullmatch(r'-?[0-9]+', channel):
+        return int(channel)
+    public_link = re.fullmatch(
+        r'(?:https?://)?(?:t\.me|telegram\.me)/(?:s/)?([a-z0-9_]+)/?(?:\?[^\s]*)?',
+        channel, re.IGNORECASE | re.ASCII,
+    )
+    if public_link:
+        return '@' + public_link[1]
+    if re.fullmatch(r'@?[a-z0-9_]+', channel, re.IGNORECASE | re.ASCII):
+        return '@' + channel.lstrip('@')
+    return None
+
+
+def _lookup_channel_member(channel_id, user_id):
+    try:
+        member = bot.get_chat_member(channel_id, int(user_id))
+        if member is not None:
+            return member, None
+        error = 'Empty membership response'
+    except apihelper.ApiTelegramException as exc:
+        description = exc.description.replace(bot.token, '[REDACTED]')
+        error = f'Telegram {exc.error_code}: {description}'
+    except Exception as exc:
+        error = type(exc).__name__
+    logger.warning('getChatMember failed for %s: %s', channel_id, error)
+    return None, error
+
+
+def _channel_setup_error(channel_id):
+    if channel_id is None:
+        return "شناسهٔ کانال نامعتبر است. برای کانال خصوصی Chat ID عددی را وارد کنید."
+    member, error = _lookup_channel_member(channel_id, bot.bot_id)
+    if error:
+        return f"تلگرام نتوانست دسترسی ربات به کانال را بررسی کند. شناسهٔ کانال و دسترسی ادمین ربات را بررسی کنید.\n{error}"
+    if member.status not in ('administrator', 'creator'):
+        return "ابتدا ربات را در این کانال ادمین کنید."
+    return None
+
+
 def _channel_membership_ok(user_id):
     if get_db_setting('membership_required', '0') != '1':
         return True, None
-    channel = get_db_setting('required_channel', '').strip()
-    if not channel:
+    channel = get_db_setting('required_channel', '')
+    if not channel or not channel.strip():
         return False, "کانال اجباری هنوز توسط مدیریت تنظیم نشده است."
-    try:
-        member = bot.get_chat_member(channel, int(user_id))
-        if member.status in ('member', 'administrator', 'creator'):
-            return True, None
-        return False, "برای خرید باید ابتدا عضو کانال SpeedPing شوید."
-    except Exception as e:
+    channel_id = _required_channel_id(channel)
+    if channel_id is None:
+        logger.warning('Required channel does not contain a valid chat ID or public username')
         return False, "امکان بررسی عضویت کانال وجود ندارد؛ به پشتیبانی اطلاع دهید."
+    member, error = _lookup_channel_member(channel_id, user_id)
+    if error:
+        return False, "امکان بررسی عضویت کانال وجود ندارد؛ به پشتیبانی اطلاع دهید."
+    if member.status in ('member', 'administrator', 'creator') or (
+        member.status == 'restricted' and member.is_member
+    ):
+        return True, None
+    return False, "برای ادامه ابتدا عضو کانال شوید."
 
 
 def purchase_gate(user_id):
@@ -848,8 +895,8 @@ def purchase_gate(user_id):
         m = types.InlineKeyboardMarkup()
         url = get_db_setting('required_channel_url', '').strip()
         if not url:
-            channel = get_db_setting('required_channel', '').strip()
-            if channel.startswith('@'):
+            channel = _required_channel_id(get_db_setting('required_channel', ''))
+            if isinstance(channel, str):
                 url = 'https://t.me/' + channel[1:]
         if url:
             m.add(types.InlineKeyboardButton("📢 عضویت در کانال", url=url))
@@ -2253,6 +2300,34 @@ def _authorize_service_callback(call, value, subscription=False):
     return allowed
 
 
+def _send_direct_configs(user_id, links):
+    title = "🔑 کانفیگ‌های اتصال مستقیم"
+    heading = f"<b>{title}</b>\n\n"
+    # Count the visible text in UTF-16 units and keep one code block per link.
+    heading_length = len((title + '\n\n').encode('utf-16-le')) // 2
+    batches = []
+    blocks = []
+    length = heading_length
+    for link in links:
+        link_length = len(link.encode('utf-16-le')) // 2 + 1
+        if heading_length + link_length > MAX_MESSAGE_LENGTH:
+            with BytesIO('\n'.join(links).encode('utf-8')) as document:
+                document.name = 'speedyping-configs.txt'
+                bot.send_document(user_id, document, caption=title)
+            return
+        if length + link_length > MAX_MESSAGE_LENGTH:
+            batches.append(heading + ''.join(blocks))
+            blocks = []
+            length = heading_length
+        length += link_length
+        blocks.append(f'<pre>{escape(link, quote=False)}</pre>\n')
+
+    if blocks:
+        batches.append(heading + ''.join(blocks))
+    for batch in batches:
+        bot.send_message(user_id, batch, parse_mode='HTML')
+
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith('getlinks:'))
 def handle_account_get_links(call):
     parts = call.data.split(':', 2)
@@ -2277,10 +2352,7 @@ def handle_account_get_links(call):
         config_links = _get_delivery_links(param, sid, headers, request_proxies)
         
         if config_links:
-            msg_text = "🔑 **کانفیگ‌های اتصال مستقیم شما:**\n\n"
-            for link in config_links:
-                msg_text += f"```\n{link}\n```\n"
-            bot.send_message(user_id, msg_text, parse_mode="Markdown")
+            _send_direct_configs(user_id, config_links)
         else:
             bot.send_message(user_id, "❌ کانفیگ مستقیمی یافت نشد.")
 
@@ -3038,9 +3110,16 @@ def handle_admin_panel_callbacks(call):
         m.add(
             types.InlineKeyboardButton("📱 روشن/خاموش شماره", callback_data="admin:phone_toggle"),
             types.InlineKeyboardButton("📢 روشن/خاموش عضویت", callback_data="admin:membership_toggle"),
-            types.InlineKeyboardButton("⚙️ تنظیم کانال", callback_data="admin:channel_set")
+            types.InlineKeyboardButton("⚙️ تنظیم کانال", callback_data="admin:channel_set"),
+            types.InlineKeyboardButton("🧪 بررسی دسترسی ربات", callback_data="admin:channel_check"),
         )
         bot.send_message(admin_chat, text, parse_mode="Markdown", reply_markup=m)
+
+    elif action == "channel_check":
+        bot.answer_callback_query(call.id)
+        channel_id = _required_channel_id(get_db_setting('required_channel', ''))
+        error = _channel_setup_error(channel_id)
+        bot.send_message(admin_chat, f"❌ {error}" if error else "✅ ربات در کانال تنظیم‌شده ادمین است.")
 
     elif action == "phone_toggle":
         new = '0' if get_db_setting('phone_verification_required','0') == '1' else '1'
@@ -3050,12 +3129,19 @@ def handle_admin_panel_callbacks(call):
 
     elif action == "membership_toggle":
         new = '0' if get_db_setting('membership_required','0') == '1' else '1'
+        if new == '1':
+            bot.answer_callback_query(call.id)
+            error = _channel_setup_error(_required_channel_id(get_db_setting('required_channel', '')))
+            if error:
+                bot.send_message(admin_chat, f"❌ {error}")
+                return
+        else:
+            bot.answer_callback_query(call.id, "تغییر کرد ✅")
         update_db_setting('membership_required', new)
-        bot.answer_callback_query(call.id, "تغییر کرد ✅")
         bot.send_message(admin_chat, f"📢 عضویت اجباری {'فعال شد' if new=='1' else 'غیرفعال شد'}.")
 
     elif action == "channel_set":
-        msg = bot.send_message(admin_chat, "کانال را بفرستید:\n`@channel | https://t.me/channel`\nبرای کانال خصوصی می‌توانید Chat ID عددی و لینک دعوت را بدهید.", parse_mode="Markdown")
+        msg = bot.send_message(admin_chat, "ابتدا ربات را در کانال ادمین کنید.\nبرای کانال عمومی `@channel` یا `https://t.me/channel` را بفرستید.\nبرای کانال خصوصی `Chat ID | لینک دعوت` را بفرستید.", parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_admin_channel_set)
 
     elif action == "admins":
@@ -3518,15 +3604,23 @@ def process_admin_gift_toggle(message):
 
 
 def process_admin_channel_set(message):
+    channel, _, url = (message.text or '').partition('|')
+    channel_id = _required_channel_id(channel)
+    error = _channel_setup_error(channel_id)
+    if error:
+        _admin_reply(message, f"❌ {error}")
+        return
+
+    conn = _db_connect()
     try:
-        parts=[x.strip() for x in (message.text or '').split('|')]
-        channel=parts[0]; url=parts[1] if len(parts)>1 else ''
-        if not channel: raise ValueError
-        if channel.lstrip('-').isdigit(): channel=int(channel)
-        update_db_setting('required_channel',str(channel)); update_db_setting('required_channel_url',url)
-        _admin_reply(message,f"✅ کانال اجباری روی `{channel}` تنظیم شد.",parse_mode="Markdown")
-    except Exception:
-        _admin_reply(message,"❌ فرمت کانال نامعتبر است.")
+        with conn:
+            conn.executemany(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                [('required_channel', str(channel_id)), ('required_channel_url', url.strip())],
+            )
+    finally:
+        conn.close()
+    _admin_reply(message, f"✅ کانال اجباری روی <code>{channel_id}</code> تنظیم شد.", parse_mode="HTML")
 
 
 def process_admin_add(message):
@@ -4490,16 +4584,12 @@ def generate_trial_xui_config(user_id, user_email):
         subscription_url = _subscription_url(sub_id)
         msg_text += f"🌐 **لینک سابسکریپشن:**\n```\n{subscription_url}\n```\n"
 
-    if config_links:
-        msg_text += "\n🔑 **کانفیگ‌های اتصال مستقیم:**\n"
-        for link in config_links:
-            msg_text += f"```\n{link}\n```\n"
-
     msg_text += "\nاگر سرویس برای شما مناسب بود، از بخش خرید می‌توانید سرویس اصلی را تهیه کنید. ⚡️"
 
     # خطای ارسال پیام تلگرام نباید یک سرویس واقعاً ساخته‌شده را FAILED کند.
     try:
         bot.send_message(user_id, msg_text, parse_mode="Markdown", reply_markup=main_menu())
+        _send_direct_configs(user_id, config_links)
     except Exception as e:
         try:
             notify_admins(f"⚠️ تست کاربر {user_id} ساخته شد اما پیام تحویل به کاربر ارسال نشد: {str(e)[:500]}")
@@ -4592,14 +4682,13 @@ def _send_transaction_success(tx_id, sub_id=None, config_links=None):
     kind = tx['kind'] or 'NEW'
     name = tx['plan_name_snapshot'] or 'SpeedPing'
     if kind == 'NEW':
-        msg_text = f"🎉 **سرویس SpeedPing شما فعال شد!**\n\n📦 پلن: **{name}**\n🆔 تراکنش: `{tx_id}`\n\n"
+        msg_text = f"🎉 <b>سرویس SpeedPing شما فعال شد!</b>\n\n📦 پلن: <b>{escape(name)}</b>\n🆔 تراکنش: <code>{int(tx_id)}</code>\n\n"
         if sub_id:
-            msg_text += f"🌐 **لینک سابسکریپشن:**\n```\n{_subscription_url(sub_id)}\n```\n"
-        if config_links:
-            msg_text += "\n🔑 **کانفیگ‌های اتصال مستقیم:**\n"
-            for link in config_links:
-                msg_text += f"```\n{link}\n```\n"
+            msg_text += f"🌐 <b>لینک سابسکریپشن</b>\n<pre>{escape(_subscription_url(sub_id))}</pre>\n"
         msg_text += "\nاز بخش حساب کاربری می‌توانید وضعیت، QR و تمدید سرویس را مدیریت کنید."
+        bot.send_message(user_id, msg_text, parse_mode="HTML", reply_markup=main_menu())
+        _send_direct_configs(user_id, config_links or [])
+        return
     elif kind == 'RENEWAL':
         msg_text = (
             f"♻️ **تمدید سرویس با موفقیت انجام شد.**\n\n"

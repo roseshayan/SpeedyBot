@@ -1,8 +1,10 @@
 import os
+import re
 import sqlite3
 import tempfile
 import unittest
 from contextlib import closing
+from html import unescape
 from unittest.mock import Mock, patch
 
 from speedybot import env_manager
@@ -276,6 +278,101 @@ class XuiAndCardTests(unittest.TestCase):
                     with patch.object(core.bot, "send_message"):
                         core.handle_account_get_links(call)
         answer.assert_called_once_with(call.id)
+
+    def test_required_channel_uses_existing_public_links_and_private_chat_ids(self):
+        core.update_db_setting("membership_required", "1")
+        for stored_channel, chat_id in (
+            ("https://t.me/Speed_Ping", "@Speed_Ping"),
+            ("Speed_Ping", "@Speed_Ping"),
+            ("-1001234567890", -1001234567890),
+        ):
+            with self.subTest(channel=stored_channel):
+                core.update_db_setting("required_channel", stored_channel)
+                with patch.object(core.bot, "get_chat_member", return_value=Mock(status="member")) as get:
+                    self.assertEqual(core._channel_membership_ok(123), (True, None))
+                get.assert_called_once_with(chat_id, 123)
+
+        core.update_db_setting("required_channel", "https://t.me/Speed_Ping")
+        with patch.object(core.bot, "get_chat_member", return_value=Mock(status="left")):
+            with patch.object(core.bot, "send_message") as send:
+                self.assertFalse(core.purchase_gate(123))
+        markup = send.call_args.kwargs["reply_markup"].to_dict()["inline_keyboard"]
+        self.assertEqual(markup[0][0]["url"], "https://t.me/Speed_Ping")
+
+    def test_channel_settings_check_bot_admin_access_before_saving(self):
+        core.update_db_setting("required_channel", "@original")
+        message = FakeMessage(text="-1001234567890 | https://t.me/+example")
+        error = core.apihelper.ApiTelegramException(
+            "getChatMember", None, {"error_code": 400, "description": "Bad Request: chat not found"},
+        )
+        with patch.object(core.bot, "get_chat_member", side_effect=[error, Mock(status="administrator")]) as get:
+            with patch.object(core.bot, "send_message") as send:
+                with self.assertLogs(core.logger, level="WARNING"):
+                    core.process_admin_channel_set(message)
+                self.assertIn("chat not found", send.call_args.args[1])
+                self.assertEqual(core.get_db_setting("required_channel"), "@original")
+                core.process_admin_channel_set(message)
+        self.assertEqual(get.call_args.args, (-1001234567890, core.bot.bot_id))
+        self.assertEqual(core.get_db_setting("required_channel"), "-1001234567890")
+        self.assertEqual(core.get_db_setting("required_channel_url"), "https://t.me/+example")
+
+    def test_approved_purchase_delivers_all_configs_in_order(self):
+        with closing(sqlite3.connect("speedping.db")) as conn, conn:
+            conn.execute(
+                "INSERT INTO transactions(id,user_id,plan_id,status,kind,plan_name_snapshot) "
+                "VALUES (3,123,1,'PROCESSING','NEW','VIP <2>')"
+            )
+        schemes = ["vless://"] * 4 + ["trojan://"] * 17 + ["tg://proxy?"] * 2
+        links = [f"{scheme}example.invalid/{i}?server={'a' * 270}&name=🚀" for i, scheme in enumerate(schemes)]
+        core.update_db_setting("xui_sub_server_url", "https://sub.example.invalid")
+
+        def send_with_telegram_limit(chat_id, text, **kwargs):
+            self.assertEqual(chat_id, 123)
+            self.assertEqual(kwargs["parse_mode"], "HTML")
+            visible_text = unescape(re.sub(r'<[^>]+>', '', text))
+            if len(visible_text.encode('utf-16-le')) // 2 > 4096:
+                raise RuntimeError("message is too long")
+
+        with patch.multiple(
+            core, provision_xui_service=Mock(return_value=("sample", links)), _finish_discount=Mock(),
+            _send_guide_cta=Mock(), _maybe_ask_acquisition_source=Mock(), credit_referral_commission=Mock(return_value=None),
+            credit_cashback=Mock(return_value=None), notify_admins=Mock(),
+        ):
+            with patch.object(core.bot, "send_message", side_effect=send_with_telegram_limit) as send:
+                self.assertTrue(core.finalize_service_transaction(3))
+            core._send_guide_cta.assert_called_once_with(123)
+            core.notify_admins.assert_called_once()
+        messages = [call.args[1] for call in send.call_args_list]
+        self.assertIn("<b>VIP &lt;2&gt;</b>", messages[0])
+        self.assertIn("https://sub.example.invalid/sub/sample", messages[0])
+        self.assertGreater(len(messages[1:]), 1)
+        sent_links = [unescape(link) for text in messages[1:] for link in re.findall(r'<pre>(.*?)</pre>', text)]
+        self.assertEqual(sent_links, links)
+        with closing(sqlite3.connect("speedping.db")) as conn:
+            self.assertEqual(conn.execute("SELECT status FROM transactions WHERE id=3").fetchone()[0], "APPROVED")
+
+    def test_account_delivers_overlong_config_as_complete_text_file(self):
+        call = Mock(data="getlinks:dir:owned")
+        call.from_user.id = 123
+        call.message.chat.id = 123
+        links = ["vless://example.invalid/" + "a" * 4096, "tg://proxy?server=example.invalid"]
+
+        def check_document(chat_id, data, **kwargs):
+            self.assertEqual(chat_id, 123)
+            self.assertEqual(data.name, "speedyping-configs.txt")
+            self.assertEqual(data.read().decode("utf-8").splitlines(), links)
+
+        with patch.multiple(
+            core, _user_owns_service=Mock(return_value=True), _get_client_data=Mock(return_value={}),
+            _get_client_subscription_id=Mock(return_value=None), _get_delivery_links=Mock(return_value=links),
+        ):
+            with patch.object(core.bot, "answer_callback_query") as answer:
+                with patch.object(core.bot, "send_document", side_effect=check_document) as send:
+                    with patch.object(core.bot, "send_message") as send_message:
+                        core.handle_account_get_links(call)
+        answer.assert_called_once()
+        send.assert_called_once()
+        send_message.assert_not_called()
 
     def test_stale_invoice_decisions_cannot_override_another_admin_claim(self):
         con = sqlite3.connect("speedping.db")

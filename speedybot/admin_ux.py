@@ -235,10 +235,11 @@ def _legacy_spec(call):
     if action == "channel_set":
         return (
             "تنظیم کانال عضویت اجباری",
-            "برای کانال عمومی فقط Username را بفرستید:\n<code>@SpeedPing</code>\n\n"
+            "برای کانال عمومی نام کاربری یا لینک کانال را بفرستید:\n"
+            "<code>@SpeedPing</code> یا <code>https://t.me/SpeedPing</code>\n\n"
             "برای کانال خصوصی، Chat ID و لینک دعوت را با <code>|</code> جدا کنید:\n"
             "<code>-1001234567890 | https://t.me/+InviteLink</code>\n\n"
-            "ربات باید بتواند وضعیت عضویت کاربر را در آن کانال بررسی کند.",
+            "ابتدا ربات را در همان کانال ادمین کنید.",
             core.process_admin_channel_set,
             (),
         )

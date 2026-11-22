@@ -127,11 +127,11 @@ def generate(uid, email):
     )
     if sub:
         text += f"\n🌐 <b>Subscription</b>\n<code>{html.escape(C.CORE._subscription_url(sub))}</code>\n"
-    if links:
-        text += "\n🔑 <b>Direct configs</b>\n" + "\n".join(
-            f"<code>{html.escape(link)}</code>" for link in links
-        )
-    C.BOT.send_message(uid, text, parse_mode="HTML", reply_markup=C.CORE.main_menu())
+    try:
+        C.BOT.send_message(uid, text, parse_mode="HTML", reply_markup=C.CORE.main_menu())
+        C.CORE._send_direct_configs(uid, links)
+    except Exception as exc:
+        C.CORE.notify_admins(f"⚠️ تست کاربر {uid} فعال شد اما تحویل کانفیگ خطا داد: {str(exc)[:500]}")
     C.CORE._send_guide_cta(uid)
     C.audit(
         "TRIAL_ISSUED",
